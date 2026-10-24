@@ -76,7 +76,7 @@ describe('插件标识与常量', () => {
     assert.equal(constants.DEFAULT_ROUTE_KEY, 'workbuddy2api-hub')
     assert.equal(constants.DEFAULT_API_KEY_ENV, 'WORKBUDDY2API_HUB_API_KEY')
     assert.equal(constants.DEFAULT_PROVIDER_ENTRY, 'llm-pi-ai')
-    assert.equal(constants.PLUGIN_VERSION, '1.0.10')
+    assert.equal(constants.PLUGIN_VERSION, '1.0.11')
   })
 
   test('tab 白名单与 hub 的 TABS 一致', () => {
