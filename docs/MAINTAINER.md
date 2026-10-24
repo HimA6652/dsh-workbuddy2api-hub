@@ -120,22 +120,30 @@ dsh-market 的「发现插件」读的是人工策展目录 [awesome-dsh-plugin]
 
 门槛（据其 `contributing.md`）：
 
-- `package.json` 声明 `dsh.bundle`，仓库根有 `cordis.patch.yml`（本仓库都有）；
-- 仓库里是真实可用的代码，不是占位；
-- **仓库创建满 1 天**（CI 自动检查）；
+- `package.json` 声明 `dsh.bundle`，仓库根有 `cordis.patch.yml`（本仓库都有，只声明 `dsh.client` 会被拒）；
+- 仓库里是真实可用的代码，不是占位、不是只列依赖的聚合包；
+- **仓库创建满 1 天**（CI 自动查；本仓库建于 `2026-10-24 14:41 +0800`，即 10-25 14:41 之后才达标）；
 - 仓库加 GitHub topic `dsh-plugin`；
-- 单开一个 PR，只加**一个文件** `data/plugins/<owner>__<repo>.yml`：
+- 描述**必须与代码一致**且不带营销词——夸大是主要打回原因；
+- 单开一个 PR，只加**一个文件** `data/plugins/<owner>__<repo>.yml`，同时最多 3 条；README 由脚本生成，禁手改。
 
-```yaml
-url: https://github.com/HimA6652/dsh-workbuddy2api-hub
-name: HimA6652/dsh-workbuddy2api-hub
-category: model
-description:
-  en: Registers a local workbuddy2api-hub gateway as an OpenAI-compatible provider in DSH, and shows credit balance plus today/week token, credit and API-equivalent cost in the sidebar.
-  zh: 把本地 workbuddy2api-hub 网关注册成 DSH 的 OpenAI 兼容 provider，并在侧边栏显示积分余额与今日/本周的 tokens、积分消耗与 API 等价花费。
-```
+条目原文存在 [`market-entry.yml`](market-entry.yml)，四个字段：`url` / `name` / `category` / `description.en`（`description.zh` 可选）。
+**没有 `npm:` 字段**——模板里没这个键，npm 信息由站点自己探测。描述里出现 `: `（冒号+空格）要整段加引号，否则 YAML 解析失败。
 
-可选加分项：发布到 npm（预构建安装，免「构建授权」提示），或把预构建 tarball 挂到 Release 并用 `tarball:` 字段指过去。
+可选字段：`icon`（GitHub 托管的 png/jpg/jpeg/webp，约 96px 显示）、`tarball`（GitHub Release 的 https `.tgz`；用 `releases/latest/download/<无版本文件名>`，文件名带版本会在下次发版后 404）。
+另推荐在仓库根放 `screenshots.json`（1–8 张，路径相对该文件），市场详情页会像 App Store 一样展示。
+
+CI 依次检查：条目数 ≤3 → 抓 `package.json` 验 `dsh.bundle` → 仓库年龄 ≥1 天 → `awesome-lint` 与站点构建（双语一致、分隔符、日期、截图）。失败会在 PR 里指名要改什么，同一分支推修复即可。
+
+提交前先在 `plugins.json` 里搜一下近邻条目（`curl -s https://awesome-dsh-plugin.com/plugins.json | grep -o 'workbuddy[a-z0-9-]*' | sort -u`）。写这条时已有的近邻：
+
+| 条目 | 它做什么 | 与本条的区别 |
+| --- | --- | --- |
+| `jerry9692/dsh-workbuddy2api-panel` | 读 workbuddy2api-**panel** 的接口同步模型 + 侧边栏额度 | 上游是另一个项目（panel）；本条的 `/panel/login` 换 token、`/usage?range=` 日历周口径、API 等价花费都不在那边 |
+| `tearslee/dsh-workbuddy2api` | 托管 workbuddy2api 网关进程并注册模型 | 它管进程、只注册模型；本条不启停网关，另外做面板鉴权与用量徽标 |
+| `Yhx888/dsh-free-egg-credits` | 侧边栏看 WorkBuddy/Qoder **账号**积分与签到 | 本条看的是网关**用量**（tokens/积分/API 等价花费），不是账号余额与签到 |
+
+规则里「已覆盖」是平局排序依据、不是既得利益，且分叉只要维护得更好或确实多做了事就可以收录；但描述必须只写真实存在的差异。
 
 ## 改代码时的两个坑
 
