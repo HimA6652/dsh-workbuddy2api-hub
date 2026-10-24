@@ -35,6 +35,13 @@ function output(command, commandArgs) {
   return execFileSync(command, commandArgs, { cwd: ROOT, encoding: 'utf8' }).trim()
 }
 
+// Windows 上 npm 是 .cmd 批处理，Node 20+ 不允许直接 execFile 它（会 ENOENT/EINVAL），
+// 得让 shell 去解析。只有 npm 走这条路，git / node 仍走 execFile。
+function runShell(command) {
+  console.log(`$ ${command}`)
+  execFileSync(command, { cwd: ROOT, stdio: 'inherit', shell: true })
+}
+
 if (!/^\d+\.\d+\.\d+$/.test(version)) fail('用法：node scripts/release.mjs <major.minor.patch> [--dry-run] [--no-push]')
 
 // 1. 版本说明必须先存在，否则发出去的 Release 是空的
@@ -74,7 +81,7 @@ if (previous !== version) {
 // 5. 自检 + 测试：坏版本不放行
 run('node', ['scripts/check-secrets.mjs'])
 run('node', ['scripts/release-notes.mjs', `v${version}`])
-run('npm', ['test'])
+runShell('npm test')
 
 if (dryRun) {
   console.log('\n--dry-run：测试通过，但没提交、没打标签。工作区里的版本号改动自己决定留还是撤。')
