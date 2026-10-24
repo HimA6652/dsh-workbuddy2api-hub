@@ -1,0 +1,87 @@
+{
+  "name": "dsh-workbuddy2api-hub",
+  "version": "1.0.5",
+  "description": "workbuddy2api-hub 集成：接入本地 hub 面板，同步模型（配额/上下文/思考档位）、实时额度与用量，支持服务地址与 pwd 配置",
+  "type": "module",
+  "main": "lib/index.js",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/HimA6652/dsh-workbuddy2api-hub.git"
+  },
+  "homepage": "https://github.com/HimA6652/dsh-workbuddy2api-hub#readme",
+  "bugs": {
+    "url": "https://github.com/HimA6652/dsh-workbuddy2api-hub/issues"
+  },
+  "keywords": [
+    "dsh",
+    "dsh-plugin",
+    "workbuddy2api-hub",
+    "workbuddy2api",
+    "codebuddy",
+    "tencent-workbuddy",
+    "openai-compatible",
+    "credits",
+    "api-gateway"
+  ],
+  "scripts": {
+    "test": "node --test tests/*.test.mjs",
+    "check": "node scripts/check-secrets.mjs",
+    "mock": "node scripts/mock-hub.mjs",
+    "smoke": "node scripts/smoke-live.mjs",
+    "install": "node scripts/install-local.mjs",
+    "install:dry": "node scripts/install-local.mjs --dry-run",
+    "uninstall": "node scripts/install-local.mjs --uninstall"
+  },
+  "dsh": {
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    },
+    "client": {
+      "inject": [
+        "@deepseek-ai/dsh-client-locale",
+        "@deepseek-ai/dsh-client-ui-settings"
+      ],
+      "platform": "web"
+    }
+  },
+  "exports": {
+    ".": "./lib/index.js",
+    "./client": "./client/client.js",
+    "./cordis.patch.yml": "./cordis.patch.yml",
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "lib",
+    "client",
+    "scripts",
+    "cordis.patch.yml",
+    "README.md",
+    "LICENSE",
+    "CHANGELOG.md"
+  ],
+  "peerDependencies": {
+    "@deepseek-ai/cordis": "^4.0.2",
+    "@deepseek-ai/dsh-credentials": ">=0.2.0-rc.1 <0.2.1-0 || >=0.2.1-alpha.1 <0.3.0-0",
+    "@deepseek-ai/dsh-host-webserver": ">=0.2.0-rc.1 <0.2.1-0 || >=0.2.1-alpha.1 <0.3.0-0",
+    "@deepseek-ai/dsh-llm-pi-ai": ">=0.2.0-rc.1 <0.2.1-0 || >=0.2.1-alpha.1 <0.3.0-0",
+    "@deepseek-ai/dsh-settings": ">=0.2.0-rc.1 <0.2.1-0 || >=0.2.1-alpha.1 <0.3.0-0"
+  },
+  "peerDependenciesMeta": {
+    "@deepseek-ai/dsh-credentials": {
+      "optional": true
+    },
+    "@deepseek-ai/dsh-host-webserver": {
+      "optional": true
+    },
+    "@deepseek-ai/dsh-llm-pi-ai": {
+      "optional": true
+    },
+    "@deepseek-ai/dsh-settings": {
+      "optional": true
+    }
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}

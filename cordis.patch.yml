@@ -1,0 +1,10 @@
+# dsh bundle patch: inserts this plugin into a profile's layer stack.
+# 三个必填配置项都有默认值（http://127.0.0.1:8788 / admin / gateway），
+# 想指向别的 hub 实例时只改下面的 config，不用动代码。
+- insert:
+    - id: workbuddy-hub
+      name: 'dsh-workbuddy2api-hub'
+      config:
+        baseUrl: 'http://127.0.0.1:8788'
+        pwd: 'admin'
+        tab: 'gateway'

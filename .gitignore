@@ -1,0 +1,37 @@
+# 依赖（本包没有运行时依赖，但本机跑过 npm/npx 就会生成）
+node_modules/
+package-lock.json
+npm-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# 日志与临时产物
+*.log
+*.tmp
+tmp/
+coverage/
+
+# 本地联调 / 安装留下的状态与备份
+workbuddy2api-hub.json
+workbuddy2api-hub.json.*
+*.bak
+*.bak-*
+*.orig
+*.rej
+.dsh/
+
+# 环境变量与凭据：永远不要提交
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+credentials.json
+.credentials.yaml
+
+# 编辑器与系统
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+desktop.ini

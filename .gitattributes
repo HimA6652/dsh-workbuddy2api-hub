@@ -1,0 +1,15 @@
+# 统一用 LF 存仓库，避免 Windows 上「只改了换行」的整文件 diff。
+# 工作区里可以是你本地的 CRLF，提交到仓库时统一转成 LF。
+* text=auto eol=lf
+
+# 这些必须是二进制，别被换行转换碰
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.ico binary
+*.zip binary
+
+# Windows 脚本保留 CRLF
+*.bat text eol=crlf
+*.cmd text eol=crlf

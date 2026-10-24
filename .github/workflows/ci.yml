@@ -1,0 +1,27 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  test:
+    name: node ${{ matrix.node }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+        node: [20, 22, 24]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node }}
+      # 插件没有运行时依赖，不需要 install；测试只用 node:test 与假宿主。
+      - run: node --test tests/hub.test.mjs tests/host.test.mjs tests/client.test.mjs
+      - run: node --test tests/e2e-mock.test.mjs
+      - run: node --check lib/index.js
+      - run: node --check client/client.js
+      - run: node --check scripts/mock-hub.mjs
