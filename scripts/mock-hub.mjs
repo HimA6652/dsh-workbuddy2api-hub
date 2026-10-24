@@ -89,7 +89,7 @@ function modelList() {
       reasoning_efforts: ['low', 'high'],
       reasoning_default_effort: 'high',
       reasoning_can_disable: true,
-      credits: 'x0.15',
+      credits: 'x0.00',
       vendor: 'j',
     },
     {

@@ -104,9 +104,11 @@ describe('主链路：登录 → 读接口 → 写 llm-pi-ai 配置', () => {
       assert.equal(hy4.maxTokens, 64000)
       assert.deepEqual(hy4.input, ['text', 'image'])
       assert.deepEqual(hy4.reasoningEfforts, { high: 'high' }, 'always_reasoning 的模型不给 off 档')
+      assert.equal(hy4.name, 'Hy4 preview ×0.29', '模型名要带倍率，否则选择器里看不出来')
 
       const hy3 = route.models.find((model) => model.id === 'hy3')
       assert.deepEqual(hy3.reasoningEfforts, { off: 'off', low: 'low', high: 'high' })
+      assert.equal(hy3.name, 'Hy3 Free', 'x0.00 的免费模型标 Free')
 
       const flash = route.models.find((model) => model.id === 'deepseek-v4.1-flash')
       assert.equal(flash.reasoningEfforts, false, '不支持思考的模型明确写 false')
