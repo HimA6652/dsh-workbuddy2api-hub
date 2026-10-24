@@ -2,6 +2,14 @@
 
 本项目遵循 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/) 与语义化版本。
 
+## [1.0.11] - 2026-10-24
+
+装插件不再顺带拉一份用不上的 `@deepseek-ai/cordis`。
+
+- `@deepseek-ai/cordis` 那条 peerDependency 标成 optional：插件一行 `@deepseek-ai/*` 都没 import
+  （`apply(ctx)` 用的是宿主传进来的 ctx），留着它只会让 `npm i dsh-workbuddy2api-hub` 多装一份副本
+  ——cordis 本来由 DSH 自己提供。现在装完 `node_modules` 里只有插件本身。
+
 ## [1.0.10] - 2026-10-24
 
 发版一条命令同时落到 npm 与 GitHub Release，npm 包里只留运行时代码。

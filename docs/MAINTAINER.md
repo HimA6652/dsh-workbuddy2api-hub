@@ -108,7 +108,9 @@ curl -s https://registry.npmjs.org/dsh-workbuddy2api-hub | # 看 dist-tags 与 v
 npm pack dsh-workbuddy2api-hub@x.y.z --pack-destination tmp/ && tar -tzf tmp/*.tgz | sort
 ```
 
-`files` 白名单决定包里有什么：`lib/`、`client/`、`cordis.patch.yml`、README / CHANGELOG / LICENSE，共 8 个文件、约 60 kB。`scripts/`（安装脚本、假 hub、发版脚本）、`tests/`、`docs/`（包括这份笔记）、`.github/` 都只在仓库里——装插件的人用不到，发出去只是让每次 `npm i` 多下一次。装一遍验证最实在：
+`files` 白名单决定包里有什么：`lib/`、`client/`、`cordis.patch.yml`、README / CHANGELOG / LICENSE，共 8 个文件、约 60 kB。`scripts/`（安装脚本、假 hub、发版脚本）、`tests/`、`docs/`（包括这份笔记）、`.github/` 都只在仓库里——装插件的人用不到，发出去只是让每次 `npm i` 多下一次。
+
+`package.json` 本身一定会进包，所以里面的 `scripts` 字段（`test` / `mock` / `release` 等）在装了包的人眼里是存在的、但文件不在——这些命令只在仓库里跑得动，属于开发用。装一遍验证最实在：
 
 ```bash
 mkdir -p tmp/verify && cd tmp/verify && npm i dsh-workbuddy2api-hub
