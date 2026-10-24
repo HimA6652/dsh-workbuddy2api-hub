@@ -1,0 +1,40 @@
+name: Release
+
+# 打一个 v* 标签就自动发 Release，不用去网页上点。
+# 正文从 CHANGELOG.md 对应小节抽（scripts/release-notes.mjs）。
+on:
+  push:
+    tags: ['v*']
+
+permissions:
+  contents: write # 建 Release 需要写权限；GITHUB_TOKEN 由 Actions 提供，不用配 secret
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      # 发版前先跑一遍测试：标签打错了还能删，坏版本放出去就要发补丁。
+      - name: 测试
+        run: |
+          node --test tests/hub.test.mjs tests/host.test.mjs tests/client.test.mjs
+          node --test tests/e2e-mock.test.mjs
+
+      - name: 从 CHANGELOG 生成说明
+        run: node scripts/release-notes.mjs "${GITHUB_REF_NAME}" > RELEASE_NOTES.md
+
+      - name: 建 Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "${GITHUB_REF_NAME}" \
+            --title "${GITHUB_REF_NAME}" \
+            --notes-file RELEASE_NOTES.md \
+            --verify-tag
