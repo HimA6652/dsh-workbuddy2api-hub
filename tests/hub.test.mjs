@@ -174,6 +174,27 @@ test('buildDashboardUrl：与用户给出的地址形态一致', () => {
   assert.match(buildDashboardUrl('http://127.0.0.1:8788', 'p@ss word&x', 'logs'), /pwd=p%40ss\+word%26x/)
 })
 
+test('buildDashboardUrl：includePwd 为 false 时不把密码拼进链接', () => {
+  // 默认（插件侧 `dashboardIncludePwd: false`）走这条：密码不进 URL，
+  // 于是也不会被 hub 写进 logs/service.log、不进浏览器历史。
+  assert.equal(
+    buildDashboardUrl('http://127.0.0.1:8788', 'admin', 'gateway', { includePwd: false }),
+    'http://127.0.0.1:8788/?tab=gateway',
+  )
+  // 显式 true 与省略等价（纯函数层保持老行为，由插件决定传什么）。
+  assert.equal(
+    buildDashboardUrl('http://127.0.0.1:8788', 'admin', 'accounts', { includePwd: true }),
+    'http://127.0.0.1:8788/?pwd=admin&tab=accounts',
+  )
+  assert.equal(
+    buildDashboardUrl('http://127.0.0.1:8788', 'admin', 'accounts', {}),
+    'http://127.0.0.1:8788/?pwd=admin&tab=accounts',
+  )
+  // 空 options 对象、密码为空、地址为空都不能炸。
+  assert.equal(buildDashboardUrl('', 'admin', 'gateway', { includePwd: false }), '')
+  assert.equal(buildDashboardUrl('http://127.0.0.1:8788', '', 'gateway', { includePwd: true }), 'http://127.0.0.1:8788/?tab=gateway')
+})
+
 /* -------------------------------- 错误分类 ------------------------------- */
 
 test('classifyFailure：四类失败必须分得清', () => {

@@ -2,6 +2,18 @@
 
 本项目遵循 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/) 与语义化版本。
 
+## [1.0.12] - 2026-10-24
+
+「打开看板」不再默认把面板密码塞进 URL。
+
+- 新增配置项 `dashboardIncludePwd`，**默认 `false`**：深链只带 `?tab=`，密码不再进地址栏、
+  浏览器历史、也不被 hub 写进自己的访问日志（hub 会把整条请求行原样落到 `logs/service.log`，
+  `GET /?pwd=…` 因此会留一份明文）。想要「进去不用再输密码」可以显式打开。
+- 设置页新增「打开看板时带上密码」开关，带一句说明；`GET /dashboard-url` 的响应多一个
+  `includePwd` 字段，方便前端确认当前策略。
+- `buildDashboardUrl(base, pwd, tab, { includePwd })` 增加第四个参数；纯函数层保持
+  「不传就是带密码」的老行为，由插件按配置决定。
+
 ## [1.0.11] - 2026-10-24
 
 装插件不再顺带拉一份用不上的 `@deepseek-ai/cordis`。

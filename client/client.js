@@ -54,6 +54,8 @@ window.__ModuleLoader__.load({
       apiKey: 'API Key',
       apiKeyHint: '对话请求用；留空则尝试从面板自动获取',
       interval: '轮询间隔（秒）',
+      dashboardPwd: '打开看板时带上密码',
+      dashboardPwdHint: '关着更安全：密码不会进地址栏和 hub 日志，进面板手输一次即可',
       save: '保存并刷新',
       test: '测试连接',
       testing: '正在测试…',
@@ -140,6 +142,8 @@ window.__ModuleLoader__.load({
       apiKey: 'API key',
       apiKeyHint: 'Used for chat requests; leave blank to reuse the panel key',
       interval: 'Poll interval (s)',
+      dashboardPwd: 'Include the password when opening the dashboard',
+      dashboardPwdHint: 'Leave off: the password stays out of the address bar and the hub log; type it once in the panel',
       save: 'Save and refresh',
       test: 'Test connection',
       testing: 'Testing…',
@@ -591,7 +595,7 @@ window.__ModuleLoader__.load({
       const [probe, setProbe] = useState(null)
 
       // 快照回来后把表单同步成服务端状态；用户正在输入时（draft 已被改过）不覆盖。
-      const serverKey = snapshot === null ? '' : `${snapshot.baseUrl}|${snapshot.tab}|${snapshot.intervalSeconds}|${snapshot.policy?.newModelPolicy}|${snapshot.policy?.retireHours}|${snapshot.policy?.thresholds?.lowCredits}`
+      const serverKey = snapshot === null ? '' : `${snapshot.baseUrl}|${snapshot.tab}|${snapshot.intervalSeconds}|${snapshot.dashboardIncludePwd}|${snapshot.policy?.newModelPolicy}|${snapshot.policy?.retireHours}|${snapshot.policy?.thresholds?.lowCredits}`
 
       const form = draft ?? {
         baseUrl: snapshot?.baseUrl ?? '',
@@ -599,6 +603,7 @@ window.__ModuleLoader__.load({
         tab: snapshot?.tab ?? 'gateway',
         apiKey: '',
         intervalSeconds: snapshot?.intervalSeconds ?? 120,
+        dashboardIncludePwd: snapshot?.dashboardIncludePwd === true,
         newModelPolicy: snapshot?.policy?.newModelPolicy ?? 'select',
         retireHours: snapshot?.policy?.retireHours ?? 24,
         lowCredits: snapshot?.policy?.thresholds?.lowCredits ?? 50,
@@ -625,6 +630,7 @@ window.__ModuleLoader__.load({
           baseUrl: form.baseUrl,
           tab: form.tab,
           intervalSeconds: Number(form.intervalSeconds) || 120,
+          dashboardIncludePwd: form.dashboardIncludePwd === true,
           autoApiKey: form.autoApiKey,
           policy: {
             newModelPolicy: form.newModelPolicy,
@@ -818,6 +824,21 @@ window.__ModuleLoader__.load({
               value: form.intervalSeconds ?? 120,
               onChange: (event) => patch({ intervalSeconds: event.target.value }),
             }),
+          ),
+          h(
+            'div',
+            { style: styles.field },
+            h(
+              'label',
+              { style: { ...styles.row, gap: '6px' } },
+              h('input', {
+                type: 'checkbox',
+                checked: form.dashboardIncludePwd === true,
+                onChange: (event) => patch({ dashboardIncludePwd: event.target.checked }),
+              }),
+              h('span', { style: styles.label }, t('dashboardPwd')),
+            ),
+            h('span', { style: styles.hint }, t('dashboardPwdHint')),
           ),
         ),
         h(

@@ -243,20 +243,54 @@ describe('插件 HTTP 接口', () => {
     }
   })
 
-  test('GET /dashboard-url 给出带 pwd 与 tab 的深链（仅本机）', async () => {
+  test('GET /dashboard-url 默认不带 pwd，只带 tab（仅本机）', async () => {
     const { ctx, runtime } = await connected()
     try {
       const result = await expectCall(runtime, { url: `/workbuddy2api-hub/api/dashboard-url` })
       assert.equal(result.status, 200)
-      assert.equal(result.body.url, `${base}/?pwd=admin&tab=gateway`)
+      // 默认 `dashboardIncludePwd: false` —— 密码不进 URL，就不会被 hub 写进
+      // logs/service.log，也不进地址栏与浏览器历史。
+      assert.equal(result.body.url, `${base}/?tab=gateway`)
+      assert.equal(result.body.url.includes('pwd='), false)
       assert.equal(result.body.tab, 'gateway')
+      assert.equal(result.body.includePwd, false)
 
       const remote = await expectCall(runtime, {
         url: `/workbuddy2api-hub/api/dashboard-url`,
         remoteAddress: '192.168.1.20',
       })
-      assert.equal(remote.status, 403, '带密码的链接不能给非本机')
+      assert.equal(remote.status, 403, '深链只给本机')
       assert.equal(JSON.stringify(remote.body).includes('admin'), false)
+    } finally {
+      ctx.__dispose()
+    }
+  })
+
+  test('打开 dashboardIncludePwd 之后深链才带 pwd', async () => {
+    const { ctx, runtime } = await connected()
+    try {
+      const saved = await expectCall(runtime, {
+        method: 'POST',
+        url: '/workbuddy2api-hub/api/config',
+        headers: { origin: base, host: new URL(base).host, 'sec-fetch-site': 'same-origin' },
+        body: { dashboardIncludePwd: true },
+      })
+      assert.equal(saved.status, 200)
+      assert.equal(saved.body.dashboardIncludePwd, true)
+
+      const result = await expectCall(runtime, { url: `/workbuddy2api-hub/api/dashboard-url` })
+      assert.equal(result.body.url, `${base}/?pwd=admin&tab=gateway`)
+      assert.equal(result.body.includePwd, true)
+
+      // 关回去，验证开关是双向的。
+      await expectCall(runtime, {
+        method: 'POST',
+        url: '/workbuddy2api-hub/api/config',
+        headers: { origin: base, host: new URL(base).host, 'sec-fetch-site': 'same-origin' },
+        body: { dashboardIncludePwd: false },
+      })
+      const back = await expectCall(runtime, { url: `/workbuddy2api-hub/api/dashboard-url` })
+      assert.equal(back.body.url, `${base}/?tab=gateway`)
     } finally {
       ctx.__dispose()
     }
@@ -590,7 +624,8 @@ describe('配置驱动：只改配置就能换地址/密码/页签', () => {
       assert.equal(runtimeB.pwd, 'two')
       assert.equal(runtimeB.tab, 'analytics')
       assert.equal(runtimeB.lastSyncError, '')
-      assert.equal(runtimeB.dashboardUrl(), `${second.base}/?pwd=two&tab=analytics`)
+      // 深链默认只带 tab；密码要在插件设置里显式打开才会拼进去。
+      assert.equal(runtimeB.dashboardUrl(), `${second.base}/?tab=analytics`)
     } finally {
       ctx.__dispose()
     }

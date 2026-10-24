@@ -110,6 +110,7 @@ dsh plugin --profile desktop add github:HimA6652/dsh-workbuddy2api-hub
 | `providerEntry` | `llm-pi-ai` | 写到哪个 settings 的 ns 下 |
 | `routeKey` | `workbuddy2api-hub` | 写进 `providers.<routeKey>`。**故意不叫 `wb`**，免得覆盖你已有的路由 |
 | `intervalSeconds` | `120` | 轮询间隔，下限 30、上限 3600；连续失败会指数退避到 30 分钟 |
+| `dashboardIncludePwd` | `false` | 「打开看板」时是否把密码拼进链接。默认不拼——`?pwd=` 会进地址栏、浏览器历史，还会被 hub 写进自己的访问日志；关着就在面板里手输一次 |
 | `sync` | `true` | 关掉就只看数据、不写模型 |
 | `autoApiKey` | `true` | 缺 Key 时是否允许从面板 `/settings/reveal` 自动取 |
 | `newModelPolicy` | `select` | hub 上新出的模型默认勾选（`select`）还是先不写（`ignore`） |
@@ -146,7 +147,7 @@ dsh plugin --profile desktop add github:HimA6652/dsh-workbuddy2api-hub
 | GET | `/state` | 全量快照（带 `ETag`，前端用 `If-None-Match` 拿 304） |
 | GET | `/usage?range=today` | 只刷用量（`range` 取 `today` / `week` / `month` / `all`） |
 | GET | `/accounts` | 只刷账号 |
-| GET | `/dashboard-url` | 看板深链（含 `pwd`），**只给本机** |
+| GET | `/dashboard-url` | 看板深链（默认只带 `tab`，`dashboardIncludePwd` 打开才带 `pwd`），**只给本机** |
 | POST | `/config` | 改地址 / 密码 / 页签 / 间隔 / API Key |
 | POST | `/selection` `/bulk` `/enable-new` | 勾选模型、全选/全不选、新模型默认策略 |
 | POST | `/refresh` `/test` `/policy` `/dismiss` `/retire` `/clear` | 同步、探测、策略、消警、立即移除、清空同步 |
@@ -157,7 +158,7 @@ dsh plugin --profile desktop add github:HimA6652/dsh-workbuddy2api-hub
 
 - **API Key** 只进 DSH 凭据库和内存，**绝不**写状态文件，也**绝不**出现在 `/state` 里（连掩码都不给）。
 - **面板密码**会存进 profile 的状态文件 `workbuddy2api-hub.json`（明文，重启后要靠它继续登录）。它只是 hub 的面板密码，不等于 API Key；如果你的 hub 用了别的重要密码，建议给面板单独设一个。
-- `/dashboard-url` 会返回带 `pwd` 的深链，所以它只对本机开放。
+- `/dashboard-url` 只对本机开放；而且默认**不把密码拼进链接**（`dashboardIncludePwd: false`）。原因很具体：hub 会把收到的请求行原样写进自己的 `logs/service.log`，`GET /?pwd=…` 因此会在磁盘上留一份明文。关掉之后进面板手输一次即可，token 存在标签页里，同一标签页内不会再问。
 - 插件对 hub 只做 GET 和 `/panel/login`，不碰任何写入接口。
 
 ## 排错
