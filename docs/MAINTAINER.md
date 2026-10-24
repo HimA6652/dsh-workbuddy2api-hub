@@ -83,6 +83,8 @@ npm run release 1.1.0
 
 `--dry-run` 只跑到测试为止（不发 npm、不提交）；`--no-publish` 只发 GitHub；`--no-push` 提交并打标签但不推。
 
+**版本号只让这个脚本改**。手改 `package.json` 里的 `version` 再把改动提上去，会得到一个「有版本号、没标签、没 Release、npm 上也没有」的幽灵版本（1.0.8 与 1.0.9 就这么漏掉的，后来补打了标签）。
+
 **标签一推，Release 自己出现**（`.github/workflows/release.yml`）：Actions 先跑测试，再用 `gh release create` 建 Release，正文来自 `scripts/release-notes.mjs`（CHANGELOG 那一节 + 自动追加的安装段）。用的是 Actions 自带的 `GITHUB_TOKEN`，不需要配任何 secret。只想要正文：
 
 ```bash
