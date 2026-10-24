@@ -87,6 +87,33 @@ npm run release 1.1.0
 node scripts/release-notes.mjs v1.1.0 > notes.md
 ```
 
+## 发布到 npm
+
+```bash
+npm run release 1.1.0     # 先按上面的流程发版、打标签
+npm publish               # 再发 npm（prepublishOnly 会跑 check-secrets + 全部测试）
+```
+
+两个坑值得记下（都是 npm 11 的行为，不是本仓库的 bug）：
+
+1. **没有 2FA 的请求发不出去**。用网页登录（`npm login --auth-type=web`）拿到的会话 token 会直接 403：`Two-factor authentication or granular access token with bypass 2fa enabled is required to publish packages`。解决办法是在 npmjs.com 建一个 **Granular Access Token**，勾上 **Bypass 2FA**，权限给 Read and write。
+2. **首次发布一个新包名会走「暂存发布」**。上传后 registry 先只出现一个占位版本 `0.0.0-stage`（描述是 *Temporary package placeholder for staged publishing*），真正的 `1.0.7` 在后台处理，约几分钟后 `dist-tags.latest` 才指过去。这段窗口里 `npm view` 和包页都可能还是 404，**别以为失败了又重复发**——重复发会得到 `You cannot publish over the previously published versions: 1.0.7`，那反而是「已经上去了」的证据。
+
+查发布结果：
+
+```bash
+npm view dsh-workbuddy2api-hub version dist.tarball
+curl -s https://registry.npmjs.org/dsh-workbuddy2api-hub | # 看 dist-tags 与 versions
+npm pack dsh-workbuddy2api-hub@x.y.z --pack-destination tmp/ && tar -tzf tmp/*.tgz | sort
+```
+
+`files` 白名单决定包里有什么（`lib`、`client`、`scripts`、`docs`、`cordis.patch.yml`、README/CHANGELOG/LICENSE），测试与临时目录永远不进包。装一遍验证最实在：
+
+```bash
+mkdir -p tmp/verify && cd tmp/verify && npm i dsh-workbuddy2api-hub
+node -e "import('dsh-workbuddy2api-hub').then(m=>console.log(m.name, m.constants.PLUGIN_VERSION))"
+```
+
 ## 插件市场收录
 
 dsh-market 的「发现插件」读的是人工策展目录 [awesome-dsh-plugin](https://github.com/awesome-dsh-plugin/awesome-dsh-plugin)（`https://awesome-dsh-plugin.com/plugins.json`）。**发布到 GitHub ≠ 能在市场里搜到**，中间隔一次 PR 收录。
