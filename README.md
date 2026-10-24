@@ -183,8 +183,12 @@ ls -l ~/.dsh/profiles/desktop/node_modules/dsh-workbuddy2api-hub
 
 ## 开发
 
+下面这些命令要 clone 仓库才能用——npm 包里只有运行时代码（`lib/`、`client/`、`cordis.patch.yml`），`scripts/`、`tests/`、`docs/` 只在仓库里。
+
 ```bash
-npm test                                # 87 个测试，跑在假宿主 + 假 hub 上，不需要起 DSH
+git clone https://github.com/HimA6652/dsh-workbuddy2api-hub.git
+cd dsh-workbuddy2api-hub
+npm test                                # 88 个测试，跑在假宿主 + 假 hub 上，不需要起 DSH
 node scripts/mock-hub.mjs --port 8789   # 起一个假 hub，用来手工点界面
 node scripts/smoke-live.mjs --json      # 对真实 hub 做只读联调
 npm run check                           # 确认没有把凭据/本机路径写进仓库
@@ -199,7 +203,7 @@ npm run check                           # 确认没有把凭据/本机路径写�
 
 改 UI 时注意：颜色一律用 DSH 注册的主题令牌 `--dsw-alias-*`（`label-primary`、`label-secondary`、`bg-layer-1/2`、`border-l1/l2`、`brand-primary`、`state-*`），不要写死色值——否则深色主题能看、浅色主题就成了「浅灰字压白底」。在哪能看到当前有哪些令牌：DSH 里打开开发者工具，看 `:root` 上的 CSS 变量。`tests/client.test.mjs` 里有两条测试盯着这件事。
 
-改代码需要的细节（调试出口、主题令牌清单、假 hub 复刻的鉴权语义、刷新退避规则、发版流程、市场收录模板）都在 [docs/MAINTAINER.md](docs/MAINTAINER.md) —— README 这里只留使用者需要知道的部分。
+改代码需要的细节（调试出口、主题令牌清单、假 hub 复刻的鉴权语义、刷新退避规则、发版流程、市场收录模板）都在 [docs/MAINTAINER.md](https://github.com/HimA6652/dsh-workbuddy2api-hub/blob/main/docs/MAINTAINER.md) —— README 这里只留使用者需要知道的部分。那份文档只在仓库里，不随 npm 包发出去。
 
 ### 与上游的关系
 

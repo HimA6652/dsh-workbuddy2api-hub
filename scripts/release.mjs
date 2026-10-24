@@ -1,11 +1,12 @@
 #!/usr/bin/env node
 /**
- * 一条命令发版：改版本号 → 自检 → 测试 → 提交 → 打标签 → 推送。
+ * 一条命令发版：改版本号 → 自检 → 测试 → 发 npm → 提交 → 打标签 → 推送。
  * 推送标签后，.github/workflows/release.yml 会自动建 GitHub Release。
  *
  *   node scripts/release.mjs 1.0.7
- *   node scripts/release.mjs 1.0.7 --dry-run     # 只跑到测试为止，不提交
- *   node scripts/release.mjs 1.0.7 --no-push     # 提交和打标签，但不推
+ *   node scripts/release.mjs 1.0.7 --dry-run      # 只跑到测试为止，不发 npm、不提交
+ *   node scripts/release.mjs 1.0.7 --no-publish   # 跳过 npm，只发 GitHub
+ *   node scripts/release.mjs 1.0.7 --no-push      # 提交和打标签，但不推
  *
  * 前提：CHANGELOG.md 里已经写好 `## [1.0.7]` 那一节——正文就是 Release 说明，
  * 这段必须人写（脚本不会替你编）。
@@ -20,6 +21,7 @@ const args = process.argv.slice(2)
 const version = (args[0] ?? '').replace(/^v/, '')
 const dryRun = args.includes('--dry-run')
 const noPush = args.includes('--no-push')
+const noPublish = args.includes('--no-publish')
 
 function fail(message) {
   console.error(`✖ ${message}`)
@@ -42,7 +44,18 @@ function runShell(command) {
   execFileSync(command, { cwd: ROOT, stdio: 'inherit', shell: true })
 }
 
-if (!/^\d+\.\d+\.\d+$/.test(version)) fail('用法：node scripts/release.mjs <major.minor.patch> [--dry-run] [--no-push]')
+// 同上，但要拿 stdout；失败不抛，交给调用方判断
+function outputShell(command) {
+  try {
+    return execFileSync(command, { cwd: ROOT, encoding: 'utf8', shell: true, stdio: ['ignore', 'pipe', 'pipe'] }).trim()
+  } catch (error) {
+    return String(error.stdout ?? '').trim()
+  }
+}
+
+if (!/^\d+\.\d+\.\d+$/.test(version)) fail('用法：node scripts/release.mjs <major.minor.patch> [--dry-run] [--no-publish] [--no-push]')
+
+const packageName = JSON.parse(readFileSync(resolve(ROOT, 'package.json'), 'utf8')).name
 
 // 1. 版本说明必须先存在，否则发出去的 Release 是空的
 const changelog = readFileSync(resolve(ROOT, 'CHANGELOG.md'), 'utf8')
@@ -84,11 +97,25 @@ run('node', ['scripts/release-notes.mjs', `v${version}`])
 runShell('npm test')
 
 if (dryRun) {
-  console.log('\n--dry-run：测试通过，但没提交、没打标签。工作区里的版本号改动自己决定留还是撤。')
+  console.log('\n--dry-run：测试通过，但没发 npm、没提交、没打标签。工作区里的版本号改动自己决定留还是撤。')
   process.exit(0)
 }
 
-// 6. 提交 + 打标签 + 推送
+// 6. 发 npm：先确认登录态与版本号没被占，再传（prepublishOnly 会再跑一遍自检 + 测试）
+if (!noPublish) {
+  const who = outputShell('npm whoami')
+  if (who === '') fail('npm 没登录，发布不了。先跑 npm whoami 看看；只想发 GitHub 就加 --no-publish')
+  console.log(`✔ npm 登录用户：${who}`)
+
+  const already = outputShell(`npm view ${packageName}@${version} version`)
+  if (already === version) {
+    fail(`${packageName}@${version} 已经在 npm 上了，别再传；换版本号或者加 --no-publish 只发 GitHub`)
+  }
+  runShell(`npm publish`)
+  console.log(`✔ ${packageName}@${version} 已发布到 npm`)
+}
+
+// 7. 提交 + 打标签 + 推送
 run('git', ['add', '-A'])
 run('git', ['commit', '-m', `chore(release): v${version}`])
 run('git', ['tag', '-a', `v${version}`, '-m', `v${version}`])
@@ -103,5 +130,6 @@ run('git', ['push'])
 run('git', ['push', 'origin', `v${version}`])
 
 const repo = (pkg.repository?.url ?? 'https://github.com/HimA6652/dsh-workbuddy2api-hub.git').replace(/^git\+/, '').replace(/\.git$/, '')
-console.log(`\n✔ 已推送 v${version}。Release 由 Actions 自动创建，稍等半分钟：`)
+console.log(`\n✔ 已推送 v${version}。GitHub Release 由 Actions 自动创建，稍等半分钟：`)
 console.log(`  ${repo}/releases`)
+if (noPublish) console.log(`  npm 这次没发（--no-publish），需要时手动 npm publish`)

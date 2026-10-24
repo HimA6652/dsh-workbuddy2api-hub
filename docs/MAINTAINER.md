@@ -77,9 +77,11 @@ cordis_inspect_query platform=client provider=Slots method=listSubTree
 npm run release 1.1.0
 ```
 
-`scripts/release.mjs` 依次做：校验版本格式 → 确认 CHANGELOG 有该节 → 工作区必须干净 → 必须在 `main` → 标签不能重名 → 改 `package.json` 与 `tests/host.test.mjs` 的 `PLUGIN_VERSION` 断言 → 跑 `check-secrets` → 预演 Release 正文 → `npm test` → 提交 `chore(release): vX` → `tag -a` → 推 main 与标签。
+`scripts/release.mjs` 依次做：校验版本格式 → 确认 CHANGELOG 有该节 → 工作区必须干净 → 必须在 `main` → 标签不能重名 → 改 `package.json` 与 `tests/host.test.mjs` 的 `PLUGIN_VERSION` 断言 → 跑 `check-secrets` → 预演 Release 正文 → `npm test` → 查 npm 登录态与版本号有没有被占 → `npm publish` → 提交 `chore(release): vX` → `tag -a` → 推 main 与标签。
 
-`--dry-run` 只跑到测试为止；`--no-push` 提交并打标签但不推。
+**一条命令同时落到 npm 和 GitHub Release**。npm 那步失败会直接停下，不会留下「GitHub 有标签、npm 没版本」的半成品；正常走完时 GitHub 那边再等 Actions 跑半分钟。
+
+`--dry-run` 只跑到测试为止（不发 npm、不提交）；`--no-publish` 只发 GitHub；`--no-push` 提交并打标签但不推。
 
 **标签一推，Release 自己出现**（`.github/workflows/release.yml`）：Actions 先跑测试，再用 `gh release create` 建 Release，正文来自 `scripts/release-notes.mjs`（CHANGELOG 那一节 + 自动追加的安装段）。用的是 Actions 自带的 `GITHUB_TOKEN`，不需要配任何 secret。只想要正文：
 
@@ -89,10 +91,7 @@ node scripts/release-notes.mjs v1.1.0 > notes.md
 
 ## 发布到 npm
 
-```bash
-npm run release 1.1.0     # 先按上面的流程发版、打标签
-npm publish               # 再发 npm（prepublishOnly 会跑 check-secrets + 全部测试）
-```
+`npm run release 1.1.0` 已经把 npm 一起发了，不用再单独 `npm publish`。手动发也不会漏自检：`prepublishOnly` 里挂着 `check-secrets` + 全部测试。
 
 两个坑值得记下（都是 npm 11 的行为，不是本仓库的 bug）：
 
@@ -107,7 +106,7 @@ curl -s https://registry.npmjs.org/dsh-workbuddy2api-hub | # 看 dist-tags 与 v
 npm pack dsh-workbuddy2api-hub@x.y.z --pack-destination tmp/ && tar -tzf tmp/*.tgz | sort
 ```
 
-`files` 白名单决定包里有什么（`lib`、`client`、`scripts`、`docs`、`cordis.patch.yml`、README/CHANGELOG/LICENSE），测试与临时目录永远不进包。装一遍验证最实在：
+`files` 白名单决定包里有什么：`lib/`、`client/`、`cordis.patch.yml`、README / CHANGELOG / LICENSE，共 8 个文件、约 60 kB。`scripts/`（安装脚本、假 hub、发版脚本）、`tests/`、`docs/`（包括这份笔记）、`.github/` 都只在仓库里——装插件的人用不到，发出去只是让每次 `npm i` 多下一次。装一遍验证最实在：
 
 ```bash
 mkdir -p tmp/verify && cd tmp/verify && npm i dsh-workbuddy2api-hub
@@ -145,7 +144,8 @@ CI 依次检查：条目数 ≤3 → 抓 `package.json` 验 `dsh.bundle` → 仓
 
 规则里「已覆盖」是平局排序依据、不是既得利益，且分叉只要维护得更好或确实多做了事就可以收录；但描述必须只写真实存在的差异。
 
-## 改代码时的两个坑
+## 改代码时的三个坑
 
 - **宿主侧 `lib/*.js` 改完必须重启 DSH**：`cordis-plugin-loader` 用裸 `await import(pkg)`，没有 cache-busting，ESM 缓存会一直给旧模块。
 - **`client/client.js` 可以热更**：`dsh-client-hmr` 会重新发布 bundle，但浏览器拿的是带 `rev` 的组合 URL（`plugins/??<pkg>/client.js&rev=<12位hash>`），`rev` 由文件 mtime/ctime/size 算出；不带 `rev` 或乱填一律 404。
+- **`package.json` 的 `scripts` 里别出现 `install` / `postinstall` / `prepublish`**：`install` 是 npm 的生命周期钩子，别人 `npm i` 你这个包时会被自动执行——我们最早那个 `"install": "node scripts/install-local.mjs"` 就因此把**装包人的 profile 依赖**改指向了包自身所在的临时目录，插件列表直接显示「异常 / 包不可用」。安装脚本现在叫 `npm run link`。

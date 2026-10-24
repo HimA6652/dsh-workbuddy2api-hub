@@ -2,6 +2,21 @@
 
 本项目遵循 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/) 与语义化版本。
 
+## [1.0.10] - 2026-10-24
+
+发版一条命令同时落到 npm 与 GitHub Release，npm 包里只留运行时代码。
+
+- `npm run release <x.y.z>` 现在会自己发 npm：先查登录态与版本号是否已被占用，再 `npm publish`，
+  最后才提交、打标签、推送（npm 失败就停，不会留「GitHub 有标签、npm 没版本」的半成品）。
+  `--no-publish` 只发 GitHub，`--dry-run` 只跑到测试。
+- npm 包从 15 个文件瘦到 8 个（约 60 kB）：只含 `lib/`、`client/`、`cordis.patch.yml` 与
+  README / CHANGELOG / LICENSE。`scripts/`、`tests/`、`docs/`、`.github/` 只在仓库里。
+- **修掉一个会改坏用户 profile 的坑**：`package.json` 里原来有个 `"install": "node scripts/install-local.mjs"`
+  ——`install` 是 npm 的生命周期钩子，任何人 `npm i dsh-workbuddy2api-hub` 都会自动执行它，
+  把「装包的那个人」的 profile 依赖改指向包自己所在的目录。已改名 `npm run link` / `npm run link:dry` /
+  `npm run unlink`，生命周期钩子不再存在。
+- README 里 `docs/MAINTAINER.md` 的链接改用 GitHub 绝对地址（npm 包页里相对链接点不开）。
+
 ## [1.0.9] - 2026-10-24
 
 模型选择器里能直接看到每个模型的倍率了。
