@@ -1163,17 +1163,22 @@ window.__ModuleLoader__.load({
       // 老宿主（< 1.0.5）没有 usageWeek：这一行干脆不画，别拿今日的数冒充本周。
       const hasWeek = snapshot?.usageWeek !== null && snapshot?.usageWeek !== undefined
       const rangeKey = summary.range === 'today' ? 'rangeToday' : summary.range === 'week' ? 'rangeWeek' : summary.range === 'month' ? 'rangeMonth' : 'rangeAll'
-      const tokensLabel = `${t(rangeKey)} ${t('tokensUnit')}`
-      const creditLabel = `${t(rangeKey)} ${t('creditUnit')}`
       const tone = error !== '' || snapshot === null ? palette.faint : snapshot.health?.ok === true ? palette.ok : palette.err
+
+      /**
+       * 一行用量：`今日 tokens 72.3M · 积分 61.41 · API 等价 ¥10.39`。
+       *
+       * 主窗口和本周共用同一个格式函数。早先主窗口拆成三行、本周挤成一行，
+       * 悬停框里两块长得不一样，读起来像两份不同的数据；现在两行同构，
+       * 只有开头的窗口名不同。
+       */
+      const usageLine = (label, item) =>
+        `${label} ${t('tokensUnit')} ${item.tokens} · ${t('creditUnit')} ${item.credit} · ${t('footerApiCost')} ${item.cost}`
+
       const title = [
         `${t('footerLabel')} · ${t('footerBalance')} ${summary.balance}`,
-        `${tokensLabel} ${summary.tokens}`,
-        `${creditLabel} ${summary.credit}`,
-        `${t('footerApiCost')} ${summary.cost}`,
-        hasWeek
-          ? `${t('rangeWeek')} ${t('tokensUnit')} ${week.tokens} · ${t('creditUnit')} ${week.credit} · ${t('footerApiCost')} ${week.cost}`
-          : '',
+        usageLine(t(rangeKey), summary),
+        hasWeek ? usageLine(t('rangeWeek'), week) : '',
         error !== '' ? error : snapshot?.baseUrl ?? '',
       ]
         .filter((line) => line !== '')

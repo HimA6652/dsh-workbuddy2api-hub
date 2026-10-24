@@ -489,6 +489,34 @@ describe('侧边栏徽标：五项数字', () => {
     }
   })
 
+  test('悬停框里今日与本周格式统一', async () => {
+    const { exports } = await loadClient()
+    const t = (key) => exports.__dicts.zh[key] ?? key
+    exports.__store.set({
+      baseUrl: 'http://127.0.0.1:8788',
+      health: { ok: true },
+      balance: { balance: 3715.39 },
+      usage: { totalTokens: 72300000, credit: 61.41, costCny: 10.39 },
+      usageWeek: { totalTokens: 260700000, credit: 465.43, costCny: 31.17 },
+      usageRange: 'today',
+    })
+    const lines = exports.__HubFooter({ t, wide: true }).props.title.split('\n')
+    assert.deepEqual(lines, [
+      'WorkBuddy · 积分余额 3715.39',
+      '今日 tokens 72.3M · 积分 61.41 · API 等价 ¥10.39',
+      '本周 tokens 260.7M · 积分 465.43 · API 等价 ¥31.17',
+      'http://127.0.0.1:8788',
+    ])
+    // 同构：把窗口名换成占位、把数字换成占位，两行必须一字不差
+    const shape = (line) => line.replace(/^(今日|本周)/, '<窗口>').replace(/[0-9][0-9.]*[KMB]?/g, '<数>')
+    assert.equal(shape(lines[1]), shape(lines[2]))
+    assert.equal(shape(lines[1]), '<窗口> tokens <数> · 积分 <数> · API 等价 ¥<数>')
+    // 收起态共用同一个 title，不该有两套文案
+    exports.__store.set({ balance: { balance: 1 }, usage: { totalTokens: 1, credit: 1, costCny: 1 }, usageRange: 'today' })
+    const narrow = exports.__HubFooter({ t, wide: false }).props.title.split('\n')
+    assert.equal(narrow[1], '今日 tokens 1 · 积分 1.00 · API 等价 ¥1.00')
+  })
+
   test('没有 usageWeek 的老宿主不画第三行，也不拿今日数冒充本周', async () => {
     const { exports } = await loadClient()
     const t = (key) => exports.__dicts.zh[key] ?? key

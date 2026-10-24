@@ -1,8 +1,8 @@
 # dsh-workbuddy2api-hub
 
-把本地跑的 [workbuddy2api-hub](https://github.com/ardeyouxipianyi/workbuddy2api-hub) 接进 DSH 桌面端：设置页里一块面板管连接（地址 / 密码 / 页签），一次同步就把 hub 上的模型连同上下文窗口、思考档位、倍率写进 DSH 的 `llm-pi-ai`，侧边栏常驻显示额度与连接状态。
+把本地跑的 [workbuddy2api-hub](https://github.com/ardeyouxipianyi/workbuddy2api-hub) 接进 DSH 桌面端。
 
-仿 [dsh-workbuddy2api-panel](https://github.com/jerry9692/dsh-workbuddy2api-panel) 的结构与对接方式写成，依赖面完全相同：宿主侧只碰 cordis 注入的服务，不 import 任何 `@deepseek-ai/*` 运行时包；前端是一个已经构建好的 `window.__ModuleLoader__` bundle，宿主直接加载，不需要打包步骤。
+装上之后：hub 上的模型会出现在 DSH 的模型列表里（带上下文窗口、图片输入、思考档位），侧边栏底部常驻一个徽标显示积分余额和今日/本周用量，设置页里多一块面板管连接。
 
 ```
 本地 workbuddy2api-hub (:8788)  ←  X-Panel-Token  ─┐
@@ -11,9 +11,19 @@
 DSH 设置页 / 侧边栏  ←  /workbuddy2api-hub/api/*  ──┘        └─→  llm-pi-ai providers.workbuddy2api-hub
 ```
 
+## 功能
+
+- **连接面板**：服务地址、面板密码、默认页签、轮询间隔；「测试连接」「立即同步」「打开看板」「清空同步」。
+- **模型同步**：把 `/v1/models` 写进 `llm-pi-ai` 的 `providers.workbuddy2api-hub`，每个模型带上 `contextWindow` / `maxTokens` / 图片输入 / 思考档位；按模型名称排序（不区分大小写、数字按数值），设置页表格与写进 DSH 的顺序一致。
+- **增量与容错**：模型下架先进宽限期（默认 24 小时，可一键立即移除），回来能复活；内容没变就不写配置，避免每次轮询都触发一次配置更新；配置冲突自动重取 revision 重试。
+- **余额与用量**：`/v1/balance-summary` 的 credit 余额，`/usage?range=today` 的请求数 / 失败数 / tokens / credit / API 等价花费 / 缓存命中。
+- **侧边栏徽标**：展开态三行——`● WorkBuddy … 3715.39` / `今日 72.3M · 61.41 · ¥10.39` / `本周 260.7M · 465.43 · ¥31.17`；窗口名贴左、三个数字贴右，依次是 tokens / 积分消耗 / API 等价花费。悬停能看完整数字和连接地址，点一下直接打开 hub 看板。
+- **告警**：连不上、密码错、登录被限流、缺 API Key、额度低于阈值、账号需要重登——都能「知道了」消掉 24 小时。
+- **不崩**：hub 没开、密码错、超时、返回 HTML、返回半截 JSON，插件都只把它变成一段中文提示；`/state` 永远返回 200，前端永远有东西可渲染。
+
 ## 为什么不是「填个地址就行」
 
-读 hub 的源码和实测行为，有三件事必须说清楚，否则接进去就是一堆 401：
+读 hub 的源码并实测之后，有三件事必须先说清楚，否则接进去就是一堆 401：
 
 | 参数 | 真实作用 | 不要误解成 |
 | --- | --- | --- |
@@ -28,24 +38,19 @@ DSH 设置页 / 侧边栏  ←  /workbuddy2api-hub/api/*  ──┘        └�
 
 拿不到 Key 时插件**不会**硬写一条注定 401 的路由，而是把「缺少 hub API Key」挂到告警里，等你填。
 
-## 功能
-
-- **连接面板**：服务地址、面板密码、默认页签、轮询间隔；「测试连接」「立即同步」「打开看板」「清空同步」。
-- **模型同步**：把 `/v1/models` 写进 `llm-pi-ai` 的 `providers.workbuddy2api-hub`，每个模型带上 `contextWindow` / `maxTokens` / 图片输入 / 思考档位；按模型名称排序（不区分大小写、数字按数值），设置页表格与写进 DSH 的顺序一致。
-- **增量与容错**：模型下架先进宽限期（默认 24 小时，可一键立即移除），回来能复活；内容没变就不写配置（`canonicalJson` 比较，避免每次轮询都触发一次 volatile 更新）；配置冲突（`SettingsConflictError`）自动重取 revision 重试。
-- **余额与用量**：`/v1/balance-summary` 的 credit 余额，`/usage?range=today` 的请求数 / 失败数 / tokens / credit / API 等价花费 / 缓存命中。注意 hub 只认 `range`（`today`/`week`/`month`/`all`），`hours=` 会被静默忽略；侧边栏徽标第一行 `WorkBuddy` + 积分余额，第二行 `今日 49.9M · 45.57 · ¥7.21`、第三行 `本周 248.1M · 455.45 · ¥29.30`（窗口名贴左、三个数贴右，依次是 tokens / 积分 / API 等价；本周是日历周，周一起算），点一下直接打开 hub 看板（深链带 `pwd` 与 `tab`）。
-- **告警**：连不上（连续失败到阈值）、密码错、登录被限流、缺 Key、额度低于阈值、账号需要重登、登录态过期——都能「知道了」消掉 24 小时。
-- **不崩**：hub 没开、密码错、超时、返回 HTML、返回半截 JSON，插件都只把它变成一段中文提示；`/state` 永远返回 200，前端永远有东西可渲染。
-
 ## 安装
 
-前置：Node.js ≥ 20（`node -v` 看一眼）、本地 `workbuddy2api-hub` 已经跑起来（默认 `http://127.0.0.1:8788`）、DSH 桌面端能正常打开。
+前置：
+
+- Node.js ≥ 20（`node -v` 看一眼）
+- 本地 `workbuddy2api-hub` 已经跑起来，浏览器能打开 `http://127.0.0.1:8788`
+- DSH 桌面端能正常打开
 
 **不需要 `npm install`**：本包没有运行时依赖（`@deepseek-ai/*` 全是 `peerDependencies`，由 DSH 自己提供），也没有打包步骤——`client/client.js` 就是可以直接加载的 `window.__ModuleLoader__` bundle。
 
 ```bash
-# 1. 放到任意目录，例如 E:\DeepseekHarnessWorkspace\dsh-workbuddy2api-hub
-git clone https://github.com/HimA6652/dsh-workbuddy2api-hub.git dsh-workbuddy2api-hub
+# 1. 克隆到任意目录
+git clone https://github.com/HimA6652/dsh-workbuddy2api-hub.git
 cd dsh-workbuddy2api-hub
 
 # 2. 先确认 hub 通不通（只读，不改任何东西）
@@ -57,11 +62,11 @@ node scripts/install-local.mjs
 # 4. 重启 DSH 桌面端
 ```
 
-> 仓库里没有任何凭据：`pwd` 与 API Key 都在**你本机**的 DSH 设置页 / 凭据库里填写，不进代码、不进 git。
-
-`install-local.mjs` 只做三件事，都可逆：在 profile 的 `package.json` 里加一条 `file:` 依赖、往 `dsh.profile.bundles` 追加一个名字、在 `node_modules/` 下建一个指向本仓库的链接（Windows 用 junction，不需要管理员）。改之前会备份 `package.json`，`--dry-run` 只看不做，`--uninstall` 原样退回。
-
 重启后：**设置 → workbuddy2api-hub** → 确认地址/密码 → 「测试连接」→「立即同步」→ 模型出现在 **设置 → 模型** 里，provider 名 `workbuddy2api-hub`。
+
+`install-local.mjs` 只做三件事，都可逆：在 profile 的 `package.json` 里加一条 `file:` 依赖、往 `dsh.profile.bundles` 追加一个名字、在 `node_modules/` 下建一个指向本仓库的链接（Windows 用 junction，不需要管理员权限）。改之前会备份 `package.json`；`--dry-run` 只看不做，`--uninstall` 原样退回。
+
+仓库里没有任何凭据：`pwd` 与 API Key 都在**你自己机器**上填，不进代码、不进 git。
 
 ### 其他安装方式
 
@@ -71,7 +76,7 @@ node scripts/install-local.mjs
 dsh plugin --profile desktop add github:HimA6652/dsh-workbuddy2api-hub
 ```
 
-自己维护一份索引、不想等市场收录的，把仓库地址当索引源加进 dsh 的 **设置 → 插件 → Discover → Index sources** 也可以。
+自己维护索引源的话，把仓库地址加进 **设置 → 插件 → Discover → Index sources** 也可以。
 
 ## 配置
 
@@ -102,19 +107,19 @@ dsh plugin --profile desktop add github:HimA6652/dsh-workbuddy2api-hub
 | `retireHours` | `24` | 模型下架后的宽限期 |
 | `thresholds.lowCredits` | `100` | 余额低于它就告警；`0` 关掉 |
 | `thresholds.unreachablePolls` | `5` | 连续失败几次才报「连不上」 |
-| `stateDir` | 空 | 状态文件目录。默认跟 profile 同级（`workbuddy2api-hub.json`），测试/便携场景可钉死 |
+| `stateDir` | 空 | 状态文件目录。默认跟 profile 同级（`workbuddy2api-hub.json`） |
 
-`baseUrl` / `pwd` / `tab` 三个字段用「显式字段指纹」判定：YAML 里改了值 → 覆盖状态；没改 → 保留你在设置页里最后改的值。所以「改配置即生效」和「UI 改动不被重启抹掉」不会打架。
+`baseUrl` / `pwd` / `tab` 三个字段按「显式字段指纹」判定：YAML 里改了值就覆盖状态，没改就保留你在设置页里最后改的值——所以「改配置即生效」和「UI 改动不被重启抹掉」不会打架。
 
 ## 错误处理
 
-所有失败都走 `classifyFailure()` 折成一句话，写进 `lastError`，同时决定要不要出告警：
+所有失败都折成一句话写进 `lastError`，同时决定要不要出告警：
 
 | 情况 | 面板上看到的 | 还会做什么 |
 | --- | --- | --- |
 | 服务没开 / 端口不通 | 连不上 hub（fetch failed）：确认本地服务已启动（默认 http://127.0.0.1:8788） | 冷启动 60 秒内每 15 秒重试，之后指数退避 |
-| 8 秒没响应 | 连不上 hub（请求超时）：… | 同上 |
-| 密码错 | 面板密码（pwd）不对：… | 出 `auth` 告警，不反复猛撞 |
+| 8 秒没响应 | 连不上 hub（请求超时） | 同上 |
+| 密码错 | 面板密码（pwd）不对 | 出 `auth` 告警，不反复猛撞 |
 | 60 秒内错 5 次 | 面板登录被限流，N 秒后再试 | 轮询间隔抬到 hub 建议的等待时间以上 |
 | 404 | 服务版本可能与本插件不匹配（HTTP 404） | — |
 | 5xx | hub 内部错误（HTTP 500） | — |
@@ -129,85 +134,56 @@ dsh plugin --profile desktop add github:HimA6652/dsh-workbuddy2api-hub
 
 | 方法 | 路径 | 说明 |
 | --- | --- | --- |
-| GET | `/state` | 全量快照（含 `ETag`，前端带 `If-None-Match` 拿 304） |
+| GET | `/state` | 全量快照（带 `ETag`，前端用 `If-None-Match` 拿 304） |
 | GET | `/usage?range=today` | 只刷用量（`range` 取 `today` / `week` / `month` / `all`） |
 | GET | `/accounts` | 只刷账号 |
 | GET | `/dashboard-url` | 看板深链（含 `pwd`），**只给本机** |
-| POST | `/config` | 改地址/密码/页签/间隔/API Key |
+| POST | `/config` | 改地址 / 密码 / 页签 / 间隔 / API Key |
 | POST | `/selection` `/bulk` `/enable-new` | 勾选模型、全选/全不选、新模型默认策略 |
 | POST | `/refresh` `/test` `/policy` `/dismiss` `/retire` `/clear` | 同步、探测、策略、消警、立即移除、清空同步 |
 
-写接口有三道闸：只接受本机来源（`127.0.0.1`/`::1`/`::ffff:127.0.0.1`）、`sec-fetch-site` 必须是 `same-origin`/`none` 且 `Origin` 与 `Host` 一致、`content-type` 必须是 JSON。响应不带任何 CORS 头。这样同机网页用 `no-cors` 的简单请求也打不进写接口。
+写接口有三道闸：只接受本机来源（`127.0.0.1` / `::1` / `::ffff:127.0.0.1`）、`sec-fetch-site` 必须是 `same-origin` 或 `none` 且 `Origin` 与 `Host` 一致、`content-type` 必须是 JSON。响应不带任何 CORS 头——这样同机网页用 `no-cors` 的简单请求也打不进写接口。
 
-## 安全和隐私
+## 安全与隐私
 
-- 面板密码存在 profile 的状态文件里（`workbuddy2api-hub.json`，需要重启后继续登录）——如果你不想让它落盘，就在设置页里每次手动填。
-- API Key 只进 DSH 凭据库和内存，**绝不**写状态文件，也**绝不**出现在 `/state` 里（连掩码都不给）。
+- **API Key** 只进 DSH 凭据库和内存，**绝不**写状态文件，也**绝不**出现在 `/state` 里（连掩码都不给）。
+- **面板密码**会存进 profile 的状态文件 `workbuddy2api-hub.json`（明文，重启后要靠它继续登录）。它只是 hub 的面板密码，不等于 API Key；如果你的 hub 用了别的重要密码，建议给面板单独设一个。
 - `/dashboard-url` 会返回带 `pwd` 的深链，所以它只对本机开放。
-- 插件不碰 hub 的写入接口，所有请求都是 GET + `/panel/login`。
+- 插件对 hub 只做 GET 和 `/panel/login`，不碰任何写入接口。
+
+## 排错
+
+**设置页没有这一块**：插件没加载。看 DSH 启动日志里有没有 `workbuddy-hub`；确认装完之后重启过；确认 `~/.dsh/profiles/<profile>/node_modules/dsh-workbuddy2api-hub` 这个链接存在。
+
+**面板显示「连不上 hub」**：先在浏览器打开 `http://127.0.0.1:8788`。打不开就是服务没起——本插件只负责连，不负责启动。
+
+**「还没有可用的 hub API Key」**：hub 的 `/settings` 里没有启用的 Key，或者你关了 `autoApiKey`。去 hub 的「设置 → API Key」建一个，或在插件设置页填进去。
+
+**模型没出现在「设置 → 模型」**：看 `lastSyncError`；确认 `sync: true`；确认 provider 名是 `workbuddy2api-hub`（没有把你原来的 `wb` 覆盖掉）。
+
+**想彻底退回去**：`node scripts/install-local.mjs --uninstall`，重启 DSH。状态文件想一起删就删 `~/.dsh/profiles/<profile>/workbuddy2api-hub.json`。
 
 ## 开发
 
 ```bash
-npm test                # 86 个测试，全部跑在假宿主 + 假 hub 上，不需要起 DSH
-node scripts/mock-hub.mjs --port 8789   # 起一个假的 hub，用来手工点界面
+npm test                                # 87 个测试，跑在假宿主 + 假 hub 上，不需要起 DSH
+node scripts/mock-hub.mjs --port 8789   # 起一个假 hub，用来手工点界面
 node scripts/smoke-live.mjs --json      # 对真实 hub 做只读联调
+npm run check                           # 确认没有把凭据/本机路径写进仓库
 ```
 
-- `lib/hub.js`：纯函数层（归一化、模型档案、汇总、退避、告警），没有网络、没有 cordis，测试覆盖最厚。
-- `lib/index.js`：宿主插件（`name` / `apply`），`HubSession` 管登录与 Token，`HubRuntime` 管刷新与写配置。
+目录：
+
+- `lib/hub.js`：纯函数层（地址归一化、模型档案、用量汇总、退避、告警），无网络、无 cordis，测试覆盖最厚。
+- `lib/index.js`：宿主插件（`name` / `apply`）；`HubSession` 管登录与 Token，`HubRuntime` 管刷新与写配置。
 - `client/client.js`：已构建的 ModuleLoader bundle（设置页分区 + 侧边栏徽标），测试用 `node:vm` 加载。
-- `scripts/mock-hub.mjs`：复刻真实 hub 的鉴权语义（面板 Token 能读、Bearer 只认 API Key、60 秒 5 次失败 429）。
+- `scripts/mock-hub.mjs`：复刻真实 hub 的鉴权语义（面板 Token 能读管理接口、Bearer 只认 API Key、60 秒 5 次失败返 429）。
 
-### 配色：只能用 `--dsw-alias-*`
+改 UI 时注意：颜色一律用 DSH 注册的主题令牌 `--dsw-alias-*`（`label-primary`、`label-secondary`、`bg-layer-1/2`、`border-l1/l2`、`brand-primary`、`state-*`），不要写死色值——否则深色主题能看、浅色主题就成了「浅灰字压白底」。在哪能看到当前有哪些令牌：DSH 里打开开发者工具，看 `:root` 上的 CSS 变量。`tests/client.test.mjs` 里有两条测试盯着这件事。
 
-UI 全部走 DSH 注册的主题令牌，不写死颜色——否则深色主题能看、浅色主题就成了「浅灰字 + 白底」：
+### 与上游的关系
 
-| 用途 | 令牌 |
-| --- | --- |
-| 正文 / 标题 | `--dsw-alias-label-primary` |
-| 次要文字、表头、提示 | `--dsw-alias-label-secondary` |
-| 卡片边框、表格线 | `--dsw-alias-border-l1` / `--dsw-alias-border-l2` |
-| 卡片 / 输入框 / 按钮底色 | `--dsw-alias-bg-layer-1` / `--dsw-alias-bg-layer-2` |
-| 主色、成功、警告、错误 | `--dsw-alias-brand-primary` / `--dsw-alias-state-success-primary` / `--dsw-alias-state-warn-primary` / `--dsw-alias-state-error-primary` |
-
-想确认当前 DSH 暴露了哪些令牌：`cordis_inspect_query platform=client provider=Theme method=listTokens`。
-`tests/client.test.mjs` 里有两条测试盯着这件事（palette 必须全是 `--dsw-alias-*`、样式里不许出现写死的深色底）。
-
-## 排错
-
-**设置页没有这一块**：插件没加载。看 DSH 启动日志里有没有 `workbuddy-hub`；确认 `install-local.mjs` 之后重启过；确认 `~/.dsh/profiles/<profile>/node_modules/dsh-workbuddy2api-hub` 这个链接存在。
-
-**面板显示「连不上 hub」**：先在浏览器打开 `http://127.0.0.1:8788/?pwd=admin&tab=gateway`。打不开就是服务没起，本插件只负责连，不负责启动。
-
-**「还没有可用的 hub API Key」**：hub 的 `/settings` 里没有启用的 Key，或者你关了 `autoApiKey`。去 hub 的「设置 → API Key」建一个，或在插件设置页填进去。
-
-**模型没出现在「设置 → 模型」**：看 `lastSyncError`；确认 `sync: true`；确认 provider 名是 `workbuddy2api-hub`（不是把你原来的 `wb` 覆盖了）。
-
-**想彻底退回去**：`node scripts/install-local.mjs --uninstall`，重启 DSH。状态文件想一起删就 `rm ~/.dsh/profiles/<profile>/workbuddy2api-hub.json`。
-
-## 插件市场收录
-
-dsh-market / dsh 的「发现插件」读的是 [awesome-dsh-plugin](https://github.com/awesome-dsh-plugin/awesome-dsh-plugin) 那份目录（`https://awesome-dsh-plugin.com/plugins.json`）。所以「发布到 GitHub」和「能在市场里搜到」是两件事，中间隔一次 PR 收录。
-
-收录要求（据其 `contributing.md`）：
-
-- `package.json` 里声明 `dsh.bundle`（本仓库有）；仓库根有 `cordis.patch.yml`（本仓库有）；
-- 仓库里是真实可用的代码（不是占位/纯 README）；
-- **仓库创建满 1 天**（CI 自动检查）；
-- 给仓库加 GitHub topic `dsh-plugin`；
-- 单开一个 PR，只加**一个文件** `data/plugins/<owner>__<repo>.yml`，内容形如：
-
-```yaml
-url: https://github.com/HimA6652/dsh-workbuddy2api-hub
-name: HimA6652/dsh-workbuddy2api-hub
-category: model
-description:
-  en: Registers a local workbuddy2api-hub gateway as an OpenAI-compatible provider in DSH, and shows credit balance plus today/week token, credit and API-equivalent cost in the sidebar.
-  zh: 把本地 workbuddy2api-hub 网关注册成 DSH 的 OpenAI 兼容 provider，并在侧边栏显示积分余额与今日/本周的 tokens、积分消耗与 API 等价花费。
-```
-
-可选加分项：发布到 npm（预构建安装免「构建授权」），或把预构建 tarball 挂到 GitHub Release 并用 `tarball:` 字段指向它。
+目录结构和「与 DSH 对接的方式」参照 [dsh-workbuddy2api-panel](https://github.com/jerry9692/dsh-workbuddy2api-panel)：宿主侧只碰 cordis 注入的服务，不 import 任何 `@deepseek-ai/*` 运行时包（各版本导出名会变）；前端是一个可被直接加载的 `window.__ModuleLoader__` bundle，没有打包步骤。
 
 ## 许可
 
