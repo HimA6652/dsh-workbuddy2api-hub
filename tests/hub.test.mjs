@@ -23,6 +23,9 @@ import {
   compareModelsByName,
   computeAlerts,
   modelDisplayName,
+  modelLabel,
+  modelRateSuffix,
+  modelRateValue,
   modelRate,
   modelReasoningEfforts,
   normalizeBaseUrl,
@@ -233,6 +236,28 @@ test('modelRate / rateText / modelDisplayName', () => {
   assert.equal(modelDisplayName({}), '未命名模型')
 })
 
+test('modelRateValue / modelRateSuffix / modelLabel：倍率要出现在选择器里', () => {
+  // 0 是有效值：hub 对免费模型给的是 "x0.00"，必须和「没声明」区分开。
+  assert.equal(modelRateValue(HY4), 0.29)
+  assert.equal(modelRateValue({ credits: 'x0.00' }), 0)
+  assert.equal(modelRateValue({ rate: 0 }), 0)
+  assert.equal(modelRateValue({ credits: 'free' }), 0, '字面量 free 也是 0')
+  assert.equal(modelRateValue({}), null)
+  assert.equal(modelRateValue(null), null)
+  // modelRate 保持老语义：0 不算「有倍率」，设置页那列原本靠它。
+  assert.equal(modelRate({ credits: 'x0.00' }), null)
+
+  assert.equal(modelRateSuffix(HY4), '×0.29')
+  assert.equal(modelRateSuffix({ credits: 'x0.00' }), 'Free')
+  assert.equal(modelRateSuffix({ credits: 'free' }), 'Free')
+  assert.equal(modelRateSuffix({ id: 'nope' }), '', '没声明倍率就什么都不加，不谎报免费')
+
+  assert.equal(modelLabel(HY4), 'Hy4 preview ×0.29')
+  assert.equal(modelLabel({ id: 'hy3', name: 'Hy3', credits: 'x0.00' }), 'Hy3 Free')
+  assert.equal(modelLabel({ id: 'bare' }), 'bare')
+  assert.equal(modelLabel({}), '未命名模型')
+})
+
 test('modelReasoningEfforts：三种语义（false / undefined / 档位对象）', () => {
   // always_reasoning 的模型不给 off 档。
   assert.deepEqual(modelReasoningEfforts(HY4), { high: 'high' })
@@ -268,7 +293,7 @@ test('toModelProfile：只写有值的字段，绝不写 0 / NaN', () => {
   const profile = toModelProfile(HY4)
   assert.deepEqual(profile, {
     id: 'hy4-preview',
-    name: 'Hy4 preview',
+    name: 'Hy4 preview ×0.29',
     contextWindow: 960000,
     maxTokens: 64000,
     input: ['text', 'image'],
@@ -278,7 +303,7 @@ test('toModelProfile：只写有值的字段，绝不写 0 / NaN', () => {
   const textOnly = toModelProfile(FLASH)
   assert.deepEqual(textOnly, {
     id: 'deepseek-v4.1-flash',
-    name: 'DS Flash',
+    name: 'DS Flash ×0.08',
     contextWindow: 1000000,
     maxTokens: 32000,
     reasoningEfforts: false,
