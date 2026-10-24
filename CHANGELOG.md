@@ -2,6 +2,19 @@
 
 本项目遵循 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/) 与语义化版本。
 
+## [1.0.7] - 2026-10-24
+
+首个发布到 npm 的版本：`npm i dsh-workbuddy2api-hub`，不用 clone 也不用构建。
+
+- `package.json` 补发布配置：`files` 白名单（`lib`、`client`、`scripts`、`docs` 与三份文档，
+  测试与临时目录不进包，整包 15 个文件 / 75 kB）、`publishConfig` 指到公共 registry、
+  `prepublishOnly` 在发布前强制跑 `check-secrets` 与全部测试——凭据或坏代码进不了 npm。
+- 维护者向内容搬到 `docs/MAINTAINER.md`（调试出口、主题令牌、假 hub 的鉴权语义、
+  刷新与退避规则、发版流程、市场收录模板），README 只留使用者需要的部分并加了指向链接。
+- 本机路径、端口、备份与凭据位置写进仓库外的 `NOTES.local.md`，并加进 `.gitignore`。
+- 发版自动化：`npm run release <version>` 一条命令完成改版本、自检、测试、提交、打标签、
+  推送；标签一推由 GitHub Actions 用 `GITHUB_TOKEN` 建 Release，正文取自本文件对应小节。
+
 ## [1.0.6] - 2026-10-24
 
 悬停框里「今日」和「本周」的写法统一，README 改成给外部读者看的版本。

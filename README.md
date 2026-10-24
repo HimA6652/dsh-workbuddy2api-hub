@@ -48,6 +48,15 @@ DSH 设置页 / 侧边栏  ←  /workbuddy2api-hub/api/*  ──┘        └�
 
 **不需要 `npm install`**：本包没有运行时依赖（`@deepseek-ai/*` 全是 `peerDependencies`，由 DSH 自己提供），也没有打包步骤——`client/client.js` 就是可以直接加载的 `window.__ModuleLoader__` bundle。
 
+最快的一条路是从 npm 装（装进 profile，不用 clone）：
+
+```bash
+cd ~/.dsh/profiles/desktop
+npm i dsh-workbuddy2api-hub
+```
+
+然后重启 DSH 桌面端。想用仓库里的安装脚本（会同时登记 `dsh.profile.bundles`，更稳）就走下面三步：
+
 ```bash
 # 1. 克隆到任意目录
 git clone https://github.com/HimA6652/dsh-workbuddy2api-hub.git
