@@ -45,7 +45,7 @@ DSH 设置页 / 侧边栏  ←  /workbuddy2api-hub/api/*  ──┘        └�
 
 ```bash
 # 1. 放到任意目录，例如 E:\DeepseekHarnessWorkspace\dsh-workbuddy2api-hub
-git clone <本仓库地址> dsh-workbuddy2api-hub
+git clone https://github.com/HimA6652/dsh-workbuddy2api-hub.git dsh-workbuddy2api-hub
 cd dsh-workbuddy2api-hub
 
 # 2. 先确认 hub 通不通（只读，不改任何东西）
@@ -62,6 +62,16 @@ node scripts/install-local.mjs
 `install-local.mjs` 只做三件事，都可逆：在 profile 的 `package.json` 里加一条 `file:` 依赖、往 `dsh.profile.bundles` 追加一个名字、在 `node_modules/` 下建一个指向本仓库的链接（Windows 用 junction，不需要管理员）。改之前会备份 `package.json`，`--dry-run` 只看不做，`--uninstall` 原样退回。
 
 重启后：**设置 → workbuddy2api-hub** → 确认地址/密码 → 「测试连接」→「立即同步」→ 模型出现在 **设置 → 模型** 里，provider 名 `workbuddy2api-hub`。
+
+### 其他安装方式
+
+装好了 DSH CLI 的机器上，也可以直接让它从 GitHub 拉（本包声明了 `dsh.bundle`，安装时不需要构建）：
+
+```bash
+dsh plugin --profile desktop add github:HimA6652/dsh-workbuddy2api-hub
+```
+
+自己维护一份索引、不想等市场收录的，把仓库地址当索引源加进 dsh 的 **设置 → 插件 → Discover → Index sources** 也可以。
 
 ## 配置
 
@@ -175,6 +185,29 @@ UI 全部走 DSH 注册的主题令牌，不写死颜色——否则深色主题
 **模型没出现在「设置 → 模型」**：看 `lastSyncError`；确认 `sync: true`；确认 provider 名是 `workbuddy2api-hub`（不是把你原来的 `wb` 覆盖了）。
 
 **想彻底退回去**：`node scripts/install-local.mjs --uninstall`，重启 DSH。状态文件想一起删就 `rm ~/.dsh/profiles/<profile>/workbuddy2api-hub.json`。
+
+## 插件市场收录
+
+dsh-market / dsh 的「发现插件」读的是 [awesome-dsh-plugin](https://github.com/awesome-dsh-plugin/awesome-dsh-plugin) 那份目录（`https://awesome-dsh-plugin.com/plugins.json`）。所以「发布到 GitHub」和「能在市场里搜到」是两件事，中间隔一次 PR 收录。
+
+收录要求（据其 `contributing.md`）：
+
+- `package.json` 里声明 `dsh.bundle`（本仓库有）；仓库根有 `cordis.patch.yml`（本仓库有）；
+- 仓库里是真实可用的代码（不是占位/纯 README）；
+- **仓库创建满 1 天**（CI 自动检查）；
+- 给仓库加 GitHub topic `dsh-plugin`；
+- 单开一个 PR，只加**一个文件** `data/plugins/<owner>__<repo>.yml`，内容形如：
+
+```yaml
+url: https://github.com/HimA6652/dsh-workbuddy2api-hub
+name: HimA6652/dsh-workbuddy2api-hub
+category: model
+description:
+  en: Registers a local workbuddy2api-hub gateway as an OpenAI-compatible provider in DSH, and shows credit balance plus today/week token, credit and API-equivalent cost in the sidebar.
+  zh: 把本地 workbuddy2api-hub 网关注册成 DSH 的 OpenAI 兼容 provider，并在侧边栏显示积分余额与今日/本周的 tokens、积分消耗与 API 等价花费。
+```
+
+可选加分项：发布到 npm（预构建安装免「构建授权」），或把预构建 tarball 挂到 GitHub Release 并用 `tarball:` 字段指向它。
 
 ## 许可
 
