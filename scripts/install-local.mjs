@@ -25,6 +25,17 @@ import { fileURLToPath } from 'node:url'
 const HERE = dirname(fileURLToPath(import.meta.url))
 const PROJECT = resolve(HERE, '..')
 
+// 这个脚本会把 PROJECT 的绝对路径写进用户 profile 的 package.json，
+// 所以它必须只从仓库本体运行。从 node_modules 里的已安装副本、或从 tmp/ 下的
+// 验证目录运行，会把 profile 指向一个随时会被删掉的临时目录（真实踩过：
+// 指向 tmp/verify 后清掉 tmp，插件立刻变成「包不可用 / 异常」）。
+if (/[\\/](node_modules|tmp)[\\/]/i.test(PROJECT)) {
+  console.error(`拒绝执行：当前位置看起来不是仓库本体\n  ${PROJECT}\n`)
+  console.error('这个脚本会把插件路径写进 DSH profile，必须从仓库根目录运行：')
+  console.error('  node scripts/install-local.mjs')
+  process.exit(1)
+}
+
 /**
  * 解析命令行参数。
  * @param argv - `process.argv.slice(2)`。

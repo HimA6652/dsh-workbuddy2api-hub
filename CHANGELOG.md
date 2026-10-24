@@ -2,6 +2,15 @@
 
 本项目遵循 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/) 与语义化版本。
 
+## [1.0.8] - 2026-10-24
+
+插件在列表里显示「异常」「包不可用」的那个坑：`scripts/install-local.mjs` 把自己**所在**的
+目录写进 DSH profile 的 `package.json`，从临时目录（如 `tmp/verify/...`）的运行副本执行时，
+profile 就被指到了一个随时会被清掉的路径——清掉之后插件立刻加载失败。
+
+- `scripts/install-local.mjs` 拒绝从 `node_modules/` 或 `tmp/` 下的副本执行，并提示必须从仓库根目录运行。
+- README 排错段补了这一症状的定位与修复：查 profile 依赖指向 + `node_modules` 链接，重跑安装脚本后重启。
+
 ## [1.0.7] - 2026-10-24
 
 首个发布到 npm 的版本：`npm i dsh-workbuddy2api-hub`，不用 clone 也不用构建。

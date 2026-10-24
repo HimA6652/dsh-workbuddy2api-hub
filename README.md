@@ -164,6 +164,15 @@ dsh plugin --profile desktop add github:HimA6652/dsh-workbuddy2api-hub
 
 **设置页没有这一块**：插件没加载。看 DSH 启动日志里有没有 `workbuddy-hub`；确认装完之后重启过；确认 `~/.dsh/profiles/<profile>/node_modules/dsh-workbuddy2api-hub` 这个链接存在。
 
+**插件列表里显示「异常」「包不可用」**：那个链接指着的地方没了。最常见的原因是 profile 的依赖被写成了一个临时目录（例如 `.../tmp/...`），临时目录一清就断。看一眼：
+
+```bash
+node -e "const p=require(process.env.HOME+'/.dsh/profiles/desktop/package.json');console.log(p.dependencies['dsh-workbuddy2api-hub'])"
+ls -l ~/.dsh/profiles/desktop/node_modules/dsh-workbuddy2api-hub
+```
+
+依赖应当指向仓库或已发布包的目录；指到 `tmp/` 之类的路径就重跑一次 `node scripts/install-local.mjs`（**必须从仓库根目录跑**，脚本会拒绝从 `node_modules/` 或 `tmp/` 下的副本执行），然后重启 DSH。
+
 **面板显示「连不上 hub」**：先在浏览器打开 `http://127.0.0.1:8788`。打不开就是服务没起——本插件只负责连，不负责启动。
 
 **「还没有可用的 hub API Key」**：hub 的 `/settings` 里没有启用的 Key，或者你关了 `autoApiKey`。去 hub 的「设置 → API Key」建一个，或在插件设置页填进去。
