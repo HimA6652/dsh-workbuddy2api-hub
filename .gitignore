@@ -29,6 +29,10 @@ workbuddy2api-hub.json.*
 credentials.json
 .credentials.yaml
 
+# 本机私有笔记（放路径、端口、备份清单这类只对自己有意义的东西）
+*.local.md
+.local/
+
 # 编辑器与系统
 .vscode/
 .idea/

@@ -181,6 +181,8 @@ npm run check                           # 确认没有把凭据/本机路径写�
 
 改 UI 时注意：颜色一律用 DSH 注册的主题令牌 `--dsw-alias-*`（`label-primary`、`label-secondary`、`bg-layer-1/2`、`border-l1/l2`、`brand-primary`、`state-*`），不要写死色值——否则深色主题能看、浅色主题就成了「浅灰字压白底」。在哪能看到当前有哪些令牌：DSH 里打开开发者工具，看 `:root` 上的 CSS 变量。`tests/client.test.mjs` 里有两条测试盯着这件事。
 
+改代码需要的细节（调试出口、主题令牌清单、假 hub 复刻的鉴权语义、刷新退避规则、发版流程、市场收录模板）都在 [docs/MAINTAINER.md](docs/MAINTAINER.md) —— README 这里只留使用者需要知道的部分。
+
 ### 与上游的关系
 
 目录结构和「与 DSH 对接的方式」参照 [dsh-workbuddy2api-panel](https://github.com/jerry9692/dsh-workbuddy2api-panel)：宿主侧只碰 cordis 注入的服务，不 import 任何 `@deepseek-ai/*` 运行时包（各版本导出名会变）；前端是一个可被直接加载的 `window.__ModuleLoader__` bundle，没有打包步骤。

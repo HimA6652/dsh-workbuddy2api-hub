@@ -1,0 +1,116 @@
+# 维护者笔记
+
+README 面向使用者（装、配、排错）。这里放**改代码时才会用到**的东西：调试入口、主题令牌、假 hub 的语义、刷新退避的实现细节、发版流程、市场收录步骤。
+
+本机相关的路径、端口、备份清单不写在这里 —— 那些在仓库外的 `NOTES.local.md`（已被 `.gitignore` 忽略）。
+
+## client/client.js 的调试出口
+
+bundle 末尾挂了一串 `exports.__*`，只为测试和手工排查用，宿主不依赖它们：
+
+| 出口 | 用途 |
+| --- | --- |
+| `__store` | 模块内的发布订阅 store：`get()` / `subscribe(fn)` / `start()` / `reload()` / `set(snapshot)` / `fail(message)` |
+| `__apiPath(path)` | 拼出插件接口的真实路径（会带上 `document.baseURI` 的部署前缀） |
+| `__requestJson` | HTTP 封装：超时、304 复用、非 JSON 容错 |
+| `__dicts` | `{ zh, en }` 两套字典，测「两种语言键集合一致」 |
+| `__palette` / `__styles` | 主题令牌与样式对象，测「不许写死颜色」 |
+| `__HubPanel` / `__HubFooter` | 两个 React 组件本体，可直接调用拿元素树 |
+| `__sortRowsByName` / `__footerSummary` | 表格排序与徽标取值（含 `—` 兜底） |
+
+测试里用 `node:vm` 把 `client.js` 丢进 `runInNewContext`，沙箱只需补 `URL` / `URLSearchParams` / `document` / `fetch` / 定时器 / `AbortSignal`。假 React 的 `createElement` 返回 `{ type, props, children }`，所以 `__HubFooter({ t, wide: true })` 能直接断言行结构和文案，不用起浏览器。
+
+注意：断言 children 数量前先过滤 `null` —— `h('div', p, a, b, cond ? c : null)` 在假 React 里会产生 `null` 项。
+
+## 配色：只能用 `--dsw-alias-*`
+
+DSH 注册的主题令牌都在 `--dsw-alias-*` 前缀下（旧版本教程里常见的 `--dsh-*` 在本机 0.2.1-rc.2 上并不存在）。`var()` 取不到变量时会静默退到兜底值，于是「深色主题写好的浅灰兜底」在浅色主题下就成了浅灰字压白底——踩过一次。
+
+| 用途 | 令牌 |
+| --- | --- |
+| 正文 / 标题 | `--dsw-alias-label-primary` |
+| 次要文字、表头、提示 | `--dsw-alias-label-secondary` |
+| 更淡的占位文字 | `--dsw-alias-state-idle-primary` |
+| 卡片边框、表格线 | `--dsw-alias-border-l1` / `--dsw-alias-border-l2` |
+| 卡片 / 输入框 / 按钮底色 | `--dsw-alias-bg-layer-1` / `--dsw-alias-bg-layer-2` |
+| 主色 | `--dsw-alias-brand-primary` |
+| 成功 / 警告 / 错误 | `--dsw-alias-state-success-primary` / `-warn-` / `-error-primary` |
+
+想看某个 DSH 版本实际注册了哪些令牌（DSH 内置的只读 inspect 工具）：
+
+```bash
+cordis_inspect_query platform=client provider=Theme method=listTokens
+```
+
+`tests/client.test.mjs` 有两条测试盯着这件事：palette 的每个值必须是 `var(--dsw-alias-*, 兜底)`，且剥掉兜底后样式里不许出现写死的 `rgba(255,255,255…)` / `rgba(0,0,0…)` 底色。
+
+同理，两个插槽的注册情况也可以直接查：
+
+```bash
+cordis_inspect_query platform=client provider=Slots method=listSubTree
+```
+
+## 假 hub 复刻了哪些真实语义
+
+`scripts/mock-hub.mjs` 不是随便返回 JSON，它复刻的是真实 hub 的鉴权行为——这些正是最容易写错的地方：
+
+- 面板 Token（`X-Panel-Token`）能读所有管理接口，**但不能当 Bearer 用**：`Authorization: Bearer <panel token>` 一律 401。所以「拿 pwd 当 API Key」这条路走不通，`/v1` 必须有真 API Key。
+- 60 秒内 5 次登录失败返回 429，带建议等待秒数。
+- `/health` 恒返回 `api_key_required: true`（真实 hub 该字段表达的是「`/v1` 需要 Key」，与配了几把无关）。
+- `/usage` 只认 `range` / `since` / `until`，`hours` 被静默忽略（我们曾照着直觉发 `?hours=24`，实际拿到的是全量历史）。
+- `/settings/reveal?id=` 是唯一能拿到明文 Key 的接口，缺 `id` 就 404。
+- 控制端点 `/mock/state`、`/mock/reset`、`/mock/models/remove`、`/mock/models/add`、`/mock/credits`、`/mock/keys`，用来在测试里模拟「模型下架」「额度见底」；flags：`--port --password --fail-auth --no-api-key --empty --no-panel-auth --slow --quiet`。
+
+## 刷新与退避
+
+- 宿主每 `intervalSeconds`（默认 120，允许 30–3600）打一轮：`/health` → `/panel/status` →（需要则 `/panel/login`）→ `/v1/models` → `/v1/balance-summary` → `/usage?range=today` → `/usage?range=week` → `/accounts`。
+- 连续失败退避（`lib/hub.js` 的 `pollIntervalMs`）：`基础值 × 2^失败次数`，最多翻 5 次、上限 1800 秒；刚启动 60 秒内的失败按 ≤15 秒快试；429 时把 hub 建议的等待当作下限。
+- 用递归 `setTimeout` 而不是 `setInterval`：改间隔立刻生效，且上一轮没跑完不会叠请求。定时器都 `.unref()`，不拖住进程退出。
+- 前端每 15 秒读一次插件 `/state`（`ETag` + `If-None-Match`，304 就复用上一份），标签页在后台（`document.hidden`）时跳过。
+- 徽标是「缓存视图」：最旧数据 = `intervalSeconds` + 15 秒。要秒级实时就点开面板，它自己 5 秒刷一次。
+
+## 发版
+
+```bash
+# 1. 先把这一版改了什么写进 CHANGELOG.md 的 `## [1.1.0]` 一节
+# 2. 一条命令走完
+npm run release 1.1.0
+```
+
+`scripts/release.mjs` 依次做：校验版本格式 → 确认 CHANGELOG 有该节 → 工作区必须干净 → 必须在 `main` → 标签不能重名 → 改 `package.json` 与 `tests/host.test.mjs` 的 `PLUGIN_VERSION` 断言 → 跑 `check-secrets` → 预演 Release 正文 → `npm test` → 提交 `chore(release): vX` → `tag -a` → 推 main 与标签。
+
+`--dry-run` 只跑到测试为止；`--no-push` 提交并打标签但不推。
+
+**标签一推，Release 自己出现**（`.github/workflows/release.yml`）：Actions 先跑测试，再用 `gh release create` 建 Release，正文来自 `scripts/release-notes.mjs`（CHANGELOG 那一节 + 自动追加的安装段）。用的是 Actions 自带的 `GITHUB_TOKEN`，不需要配任何 secret。只想要正文：
+
+```bash
+node scripts/release-notes.mjs v1.1.0 > notes.md
+```
+
+## 插件市场收录
+
+dsh-market 的「发现插件」读的是人工策展目录 [awesome-dsh-plugin](https://github.com/awesome-dsh-plugin/awesome-dsh-plugin)（`https://awesome-dsh-plugin.com/plugins.json`）。**发布到 GitHub ≠ 能在市场里搜到**，中间隔一次 PR 收录。
+
+门槛（据其 `contributing.md`）：
+
+- `package.json` 声明 `dsh.bundle`，仓库根有 `cordis.patch.yml`（本仓库都有）；
+- 仓库里是真实可用的代码，不是占位；
+- **仓库创建满 1 天**（CI 自动检查）；
+- 仓库加 GitHub topic `dsh-plugin`；
+- 单开一个 PR，只加**一个文件** `data/plugins/<owner>__<repo>.yml`：
+
+```yaml
+url: https://github.com/HimA6652/dsh-workbuddy2api-hub
+name: HimA6652/dsh-workbuddy2api-hub
+category: model
+description:
+  en: Registers a local workbuddy2api-hub gateway as an OpenAI-compatible provider in DSH, and shows credit balance plus today/week token, credit and API-equivalent cost in the sidebar.
+  zh: 把本地 workbuddy2api-hub 网关注册成 DSH 的 OpenAI 兼容 provider，并在侧边栏显示积分余额与今日/本周的 tokens、积分消耗与 API 等价花费。
+```
+
+可选加分项：发布到 npm（预构建安装，免「构建授权」提示），或把预构建 tarball 挂到 Release 并用 `tarball:` 字段指过去。
+
+## 改代码时的两个坑
+
+- **宿主侧 `lib/*.js` 改完必须重启 DSH**：`cordis-plugin-loader` 用裸 `await import(pkg)`，没有 cache-busting，ESM 缓存会一直给旧模块。
+- **`client/client.js` 可以热更**：`dsh-client-hmr` 会重新发布 bundle，但浏览器拿的是带 `rev` 的组合 URL（`plugins/??<pkg>/client.js&rev=<12位hash>`），`rev` 由文件 mtime/ctime/size 算出；不带 `rev` 或乱填一律 404。
