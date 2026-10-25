@@ -2,6 +2,19 @@
 
 本项目遵循 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/) 与语义化版本。
 
+## [1.1.1] - 2026-10-25
+
+删掉 `package.json` 里一条指向本包的 `dependencies`。
+
+- `1.0.11` 那次把 `@deepseek-ai/cordis` 标成 optional 时，`dependencies` 里顺手多出一行
+  `"dsh-workbuddy2api-hub": "^1.0.10"`——本包依赖它自己。这与 README、各版 Release 说明里
+  「不需要 `npm install`，本包没有运行时依赖」直接冲突。
+- 现在整块 `dependencies` 都已删除，包只声明 `peerDependencies`（全部 optional）。
+- 实测这条声明的影响：`^1.0.10` 恰好被顶层的 1.x 满足，所以
+  `npm i dsh-workbuddy2api-hub@1.1.0` 只装 1 个包、没有嵌套副本；但只要主版本跨过 `1.x`
+  （发 2.0.0），它就会让 npm 在包里再装一份 1.x 的旧自己。
+- 无运行时行为变更，不用动配置或状态文件。
+
 ## [1.1.0] - 2026-10-25
 
 从「一条 key」扩到「网关里有几条 key 就同步几条」，每条 key 各自一条 provider 路由、一条凭据。

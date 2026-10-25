@@ -92,8 +92,5 @@
   },
   "engines": {
     "node": ">=20"
-  },
-  "dependencies": {
-    "dsh-workbuddy2api-hub": "^1.0.10"
   }
 }
