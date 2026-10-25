@@ -401,36 +401,36 @@ describe('模型表排序', () => {
 /**
  * 多 key 快照：徽标的所有数字都从这里来。
  *
- * 两条 key（主 key `bendi` + `pool-cn`），三个窗口的用量都给全，
+ * 两条 key（主 key `key-a` + `key-c`），三个窗口的用量都给全，
  * 免得某条断言其实读到的是全局兜底值。
  */
 function multiSnapshot() {
-  const bendiToday = { totalTokens: 72300000, credit: 61.41, costCny: 10.39 }
-  const bendiWeek = { totalTokens: 260700000, credit: 465.43, costCny: 31.17 }
+  const keyaToday = { totalTokens: 72300000, credit: 61.41, costCny: 10.39 }
+  const keyaWeek = { totalTokens: 260700000, credit: 465.43, costCny: 31.17 }
   const poolToday = { totalTokens: 213, credit: 0, costCny: 0 }
   const poolWeek = { totalTokens: 639, credit: 0, costCny: 0 }
   return {
     baseUrl: 'http://127.0.0.1:8788',
     health: { ok: true },
     balance: { balance: 3731.61, accountsEnabled: 190 },
-    mainKeyBalance: { remain: 1435.83, bound: 2, found: 2, enabled: 2, missing: 0 },
-    mainKeyId: 'bendi0001',
+    mainKeyBalance: { remain: 2841.06, bound: 2, found: 2, enabled: 2, missing: 0 },
+    mainKeyId: 'keya0001',
     mainKeyMissing: false,
     keys: [
       {
-        hubKeyId: 'bendi0001',
-        name: 'bendi',
+        hubKeyId: 'keya0001',
+        name: 'key-a',
         routeKey: 'workbuddy2api-hub',
         isMain: true,
         accounts: 2,
-        balance: { remain: 1435.83, bound: 2, found: 2, enabled: 2, missing: 0 },
-        usage: bendiToday,
-        usageWeek: bendiWeek,
+        balance: { remain: 2841.06, bound: 2, found: 2, enabled: 2, missing: 0 },
+        usage: keyaToday,
+        usageWeek: keyaWeek,
       },
       {
-        hubKeyId: 'poolcn001',
-        name: 'pool-cn',
-        routeKey: 'workbuddy2api-hub-pool-cn',
+        hubKeyId: 'keyc0001',
+        name: 'key-c',
+        routeKey: 'workbuddy2api-hub-key-c',
         isMain: false,
         accounts: 2,
         balance: { remain: 88.5, bound: 2, found: 2, enabled: 2, missing: 0 },
@@ -438,8 +438,8 @@ function multiSnapshot() {
         usageWeek: poolWeek,
       },
     ],
-    usageByKey: { bendi0001: bendiToday, poolcn001: poolToday },
-    usageWeekByKey: { bendi0001: bendiWeek, poolcn001: poolWeek },
+    usageByKey: { keya0001: keyaToday, keyc0001: poolToday },
+    usageWeekByKey: { keya0001: keyaWeek, keyc0001: poolWeek },
     // 整域数故意和主 key 不同，用来证明弹窗的「总计」是按各 key 相加、不是整域口径
     usage: { totalTokens: 80000000, credit: 70, costCny: 12 },
     usageWeek: { totalTokens: 300000000, credit: 500, costCny: 35 },
@@ -553,8 +553,8 @@ describe('侧边栏徽标：三行数字', () => {
 
     // 第一行：key 名 + 「该 key 余额 / 总余额」
     const [nameNode, valueNode] = body.children[0].children
-    assert.equal(nameNode.children.join(''), 'bendi', '第一行写当前 key 的名字')
-    assert.equal(valueNode.children.join(''), '1435.83 / 3731.61')
+    assert.equal(nameNode.children.join(''), 'key-a', '第一行写当前 key 的名字')
+    assert.equal(valueNode.children.join(''), '2841.06 / 3731.61')
 
     // 第二、三行：窗口名在左，三个数字在右，两行同构
     const rowOf = (index) => body.children[index]
@@ -573,14 +573,14 @@ describe('侧边栏徽标：三行数字', () => {
     const zh = exports.__dicts.zh
     const t = (key) => zh[key] ?? key
 
-    exports.__setProviderState({ value: 'workbuddy2api-hub-pool-cn', routable: true })
+    exports.__setProviderState({ value: 'workbuddy2api-hub-key-c', routable: true })
     exports.__store.set(multiSnapshot())
 
     const tree = exports.__HubFooter({ t, wide: true })
     const body = tree.children[0].children[1]
     const [nameNode, valueNode] = body.children[0].children
-    assert.equal(nameNode.children.join(''), 'pool-cn', '名字跟着会话走')
-    assert.equal(valueNode.children.join(''), '88.50 / 3731.61', '余额也按这条 key 算，不是主 key 的 1435.83')
+    assert.equal(nameNode.children.join(''), 'key-c', '名字跟着会话走')
+    assert.equal(valueNode.children.join(''), '88.50 / 3731.61', '余额也按这条 key 算，不是主 key 的 2841.06')
     assert.deepEqual(numsOf(body.children[1]), ['213.00', '0.00', '¥0.00'])
     assert.deepEqual(numsOf(body.children[2]), ['639.00', '0.00', '¥0.00'])
 
@@ -588,8 +588,8 @@ describe('侧边栏徽标：三行数字', () => {
     exports.__setProviderState({ value: 'some-other-provider', routable: true })
     const fallback = exports.__HubFooter({ t, wide: true })
     const fallbackBody = fallback.children[0].children[1]
-    assert.equal(fallbackBody.children[0].children[0].children.join(''), 'bendi')
-    assert.equal(fallbackBody.children[0].children[1].children.join(''), '1435.83 / 3731.61')
+    assert.equal(fallbackBody.children[0].children[0].children.join(''), 'key-a')
+    assert.equal(fallbackBody.children[0].children[1].children.join(''), '2841.06 / 3731.61')
   })
 
   test('点击出副窗：贴着徽标上沿，不再用悬停 title；各 key 用量表照图排', async () => {
@@ -622,7 +622,7 @@ describe('侧边栏徽标：三行数字', () => {
     const metrics = detail.children[1]
     assert.equal(metrics.props.className, 'wbhub_metrics')
     assert.equal(metrics.children.length, 2)
-    assert.equal(metrics.children[0].children[0].children.join(''), 'bendi 积分余额')
+    assert.equal(metrics.children[0].children[0].children.join(''), 'key-a 积分余额')
 
     // 3) 各 key 用量：列标题 + 每条 key 一段 + 总计
     const block = detail.children[2]
@@ -638,14 +638,14 @@ describe('侧边栏徽标：三行数字', () => {
     assert.equal(first.props.className, 'wbhub_usageItem')
     const title = first.children[0]
     assert.equal(title.props.className, 'wbhub_usageTitle')
-    assert.equal(title.children[1].children.join(''), 'bendi')
+    assert.equal(title.children[1].children.join(''), 'key-a')
     assert.equal(title.children[2].children.join(''), '账号 2')
     assert.equal(first.children[1].children[0].children.join(''), t('rangeToday'))
     assert.deepEqual(numsOf(first.children[1]), ['72.30M', '61.41', '¥10.39'])
     assert.deepEqual(numsOf(first.children[2]), ['260.70M', '465.43', '¥31.17'])
 
     const second = table.children[2]
-    assert.equal(second.children[0].children[1].children.join(''), 'pool-cn')
+    assert.equal(second.children[0].children[1].children.join(''), 'key-c')
 
     const total = table.children[3]
     assert.equal(total.props.className, 'wbhub_usageTotal')

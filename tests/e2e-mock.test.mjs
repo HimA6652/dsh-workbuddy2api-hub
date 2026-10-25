@@ -79,7 +79,7 @@ describe('主链路：登录 → 读接口 → 写 llm-pi-ai 配置', () => {
       // 真正的要求是「密码不冒充 API Key」——credentials 里只有这些 Key 的引用名。
       assert.deepEqual(
         [...ctx.__credentials.keys()].sort(),
-        ['WORKBUDDY2API_HUB_API_KEY', 'WORKBUDDY2API_HUB_API_KEY_OTHERS', 'WORKBUDDY2API_HUB_API_KEY_POOL_CN'],
+        ['WORKBUDDY2API_HUB_API_KEY', 'WORKBUDDY2API_HUB_API_KEY_KEY_B', 'WORKBUDDY2API_HUB_API_KEY_KEY_C'],
         '一条 key 一条凭据，引用名按 key 名派生',
       )
     } finally {
@@ -124,13 +124,13 @@ describe('主链路：登录 → 读接口 → 写 llm-pi-ai 配置', () => {
       const routes = entry.value.providers
       assert.deepEqual(Object.keys(routes).sort(), [
         DEFAULT_ROUTE_KEY,
-        `${DEFAULT_ROUTE_KEY}-others`,
-        `${DEFAULT_ROUTE_KEY}-pool-cn`,
+        `${DEFAULT_ROUTE_KEY}-key-b`,
+        `${DEFAULT_ROUTE_KEY}-key-c`,
       ])
-      const pool = routes[`${DEFAULT_ROUTE_KEY}-pool-cn`]
-      assert.equal(pool.apiKeyEnv, 'WORKBUDDY2API_HUB_API_KEY_POOL_CN')
-      assert.equal(pool.displayName, 'pool-cn', '选择器里显示网关给 key 起的名字')
-      assert.deepEqual(pool.models.map((model) => model.id), ['hy3'], 'pool-cn 在网关侧只被允许看 hy3')
+      const pool = routes[`${DEFAULT_ROUTE_KEY}-key-c`]
+      assert.equal(pool.apiKeyEnv, 'WORKBUDDY2API_HUB_API_KEY_KEY_C')
+      assert.equal(pool.displayName, 'key-c', '选择器里显示网关给 key 起的名字')
+      assert.deepEqual(pool.models.map((model) => model.id), ['hy3'], 'key-c 在网关侧只被允许看 hy3')
     } finally {
       ctx.__dispose()
     }
@@ -489,32 +489,32 @@ describe('多 key：一 key 一条路由一条凭据', () => {
     try {
       const snapshot = runtime.snapshot()
       assert.equal(snapshot.keys.length, 3, '网关里有三条 key')
-      const [bendi, others, pool] = snapshot.keys
+      const [keyA, keyB, pool] = snapshot.keys
 
       // 主 key：标识冻结，名字改了也不会动路由键（否则会话里的模型会消失）
-      assert.equal(bendi.name, 'bendi')
-      assert.equal(bendi.isMain, true)
-      assert.equal(bendi.routeKey, DEFAULT_ROUTE_KEY)
-      assert.equal(bendi.apiKeyEnv, 'WORKBUDDY2API_HUB_API_KEY')
+      assert.equal(keyA.name, 'key-a')
+      assert.equal(keyA.isMain, true)
+      assert.equal(keyA.routeKey, DEFAULT_ROUTE_KEY)
+      assert.equal(keyA.apiKeyEnv, 'WORKBUDDY2API_HUB_API_KEY')
 
-      assert.equal(others.routeKey, 'workbuddy2api-hub-others')
-      assert.equal(others.apiKeyEnv, 'WORKBUDDY2API_HUB_API_KEY_OTHERS')
-      assert.equal(pool.apiKeyEnv, 'WORKBUDDY2API_HUB_API_KEY_POOL_CN')
-      // mock 里 pool-cn 只能看到 hy3 → 证明模型集是按 key 各自拉的
+      assert.equal(keyB.routeKey, 'workbuddy2api-hub-key-b')
+      assert.equal(keyB.apiKeyEnv, 'WORKBUDDY2API_HUB_API_KEY_KEY_B')
+      assert.equal(pool.apiKeyEnv, 'WORKBUDDY2API_HUB_API_KEY_KEY_C')
+      // mock 里 keyC 只能看到 hy3 → 证明模型集是按 key 各自拉的
       assert.deepEqual(pool.models.map((row) => row.id), ['hy3'])
       assert.ok(pool.pulledAt > 0, '每条 key 当轮都拉，设置页不会一片空白')
 
-      // 用量按 key 拆：bendi 今日 92 次、pool-cn 只有 6 次
-      assert.equal(bendi.usage.requests, 92)
+      // 用量按 key 拆：keyA 今日 92 次、keyC 只有 6 次
+      assert.equal(keyA.usage.requests, 92)
       assert.equal(pool.usage.requests, 6)
-      // 主 key 余额 = 它绑的两个账号之和（1347.33 + 88.5），与全局余额不是一回事
-      assert.equal(snapshot.mainKeyBalance.remain, 1435.83)
+      // 主 key 余额 = 它绑的两个账号之和（2752.56 + 88.5），与全局余额不是一回事
+      assert.equal(snapshot.mainKeyBalance.remain, 2841.06)
       assert.equal(snapshot.mainKeyBalance.bound, 2)
       // 每条 key 也带自己的余额合计：徽标要显示「当前会话那条 key 的余额」，
       // 光有主 key 那一份不够——切到别的 key 的会话时得跟着换。
-      assert.equal(bendi.balance.remain, 1435.83, '徽标第一行的分子：按这条 key 绑的账号求和')
-      assert.equal(bendi.balance.bound, 2)
-      // pool-cn 绑的账号在 mock 的 /accounts 里没有，算不出来就给 null，不能瞎报 0
+      assert.equal(keyA.balance.remain, 2841.06, '徽标第一行的分子：按这条 key 绑的账号求和')
+      assert.equal(keyA.balance.bound, 2)
+      // keyC 绑的账号在 mock 的 /accounts 里没有，算不出来就给 null，不能瞎报 0
       assert.equal(pool.balance.bound, 2)
       assert.equal(pool.balance.remain, null)
 
@@ -522,10 +522,10 @@ describe('多 key：一 key 一条路由一条凭据', () => {
       const providers = ctx.__entries.find((row) => row.ns === 'llm-pi-ai').value.providers
       assert.deepEqual(Object.keys(providers).sort(), [
         'workbuddy2api-hub',
-        'workbuddy2api-hub-others',
-        'workbuddy2api-hub-pool-cn',
+        'workbuddy2api-hub-key-b',
+        'workbuddy2api-hub-key-c',
       ])
-      assert.equal(providers['workbuddy2api-hub-others'].displayName, 'others')
+      assert.equal(providers['workbuddy2api-hub-key-b'].displayName, 'key-b')
     } finally {
       ctx.__dispose()
     }
@@ -539,18 +539,18 @@ describe('多 key：一 key 一条路由一条凭据', () => {
       const gone = await expectCall(runtime, {
         method: 'POST',
         url: '/workbuddy2api-hub/api/keys/pull-mode',
-        body: { hubKeyId: 'others001', pull: 'auto' },
+        body: { hubKeyId: 'keyb001', pull: 'auto' },
       })
       assert.equal(gone.status, 404, '拉取方式开关已经删掉')
 
       const result = await expectCall(runtime, {
         method: 'POST',
         url: '/workbuddy2api-hub/api/keys/pull',
-        body: { hubKeyId: 'poolcn001' },
+        body: { hubKeyId: 'keyc0001' },
       })
       assert.equal(result.status, 200)
       assert.equal(result.body.result.ok, true)
-      const pool = result.body.keys.find((key) => key.hubKeyId === 'poolcn001')
+      const pool = result.body.keys.find((key) => key.hubKeyId === 'keyc0001')
       assert.deepEqual(pool.models.map((row) => row.id), ['hy3'])
     } finally {
       ctx.__dispose()
@@ -565,15 +565,15 @@ describe('多 key：一 key 一条路由一条凭据', () => {
       const result = await expectCall(runtime, {
         method: 'POST',
         url: '/workbuddy2api-hub/api/keys/selection',
-        body: { hubKeyId: 'others001', id: 'hy3', enabled: false },
+        body: { hubKeyId: 'keyb001', id: 'hy3', enabled: false },
       })
       assert.equal(result.status, 200)
-      const others = result.body.keys.find((key) => key.hubKeyId === 'others001')
-      const main = result.body.keys.find((key) => key.hubKeyId === 'bendi0001')
-      assert.equal(others.counts.enabled, 2, 'others 剩两个模型')
+      const keyB = result.body.keys.find((key) => key.hubKeyId === 'keyb001')
+      const main = result.body.keys.find((key) => key.hubKeyId === 'keya0001')
+      assert.equal(keyB.counts.enabled, 2, 'key-b 剩两个模型')
       assert.equal(main.counts.enabled, 3, '主 key 的勾选不受影响')
       const providers = ctx.__entries.find((row) => row.ns === 'llm-pi-ai').value.providers
-      assert.equal(providers['workbuddy2api-hub-others'].models.length, 2)
+      assert.equal(providers['workbuddy2api-hub-key-b'].models.length, 2)
       assert.equal(providers[DEFAULT_ROUTE_KEY].models.length, 3)
     } finally {
       ctx.__dispose()
@@ -585,17 +585,17 @@ describe('多 key：一 key 一条路由一条凭据', () => {
     const runtime = new HubRuntime(ctx, { baseUrl: base })
     await runtime.start()
     try {
-      // 先把主 key 的 hy3 取消，再同步给 others：两边的 hy3 都该是关的
+      // 先把主 key 的 hy3 取消，再同步给 keyB：两边的 hy3 都该是关的
       await runtime.run(() => runtime.select('hy3', { enabled: false }))
       const result = await expectCall(runtime, {
         method: 'POST',
         url: '/workbuddy2api-hub/api/keys/sync-selection',
-        body: { from: 'bendi0001', to: ['others001'] },
+        body: { from: 'keya0001', to: ['keyb001'] },
       })
       assert.equal(result.status, 200)
       assert.equal(result.body.copied, 1)
-      const others = result.body.keys.find((key) => key.hubKeyId === 'others001')
-      const hy3 = others.models.find((row) => row.id === 'hy3')
+      const keyB = result.body.keys.find((key) => key.hubKeyId === 'keyb001')
+      const hy3 = keyB.models.find((row) => row.id === 'hy3')
       assert.equal(hy3.enabled, false, '双方都有的模型按源的勾选走')
     } finally {
       ctx.__dispose()
@@ -614,7 +614,7 @@ describe('多 key：一 key 一条路由一条凭据', () => {
       })
       assert.equal(result.status, 404)
       assert.match(result.body.error, /没有这条 key/)
-      assert.equal(runtime.snapshot().mainKeyId, 'bendi0001')
+      assert.equal(runtime.snapshot().mainKeyId, 'keya0001')
     } finally {
       ctx.__dispose()
     }
@@ -625,7 +625,7 @@ describe('多 key：一 key 一条路由一条凭据', () => {
     const runtime = new HubRuntime(ctx, { baseUrl: base })
     await runtime.start()
     try {
-      const response = await fetch(`${base}/mock/keys?del=bendi0001`)
+      const response = await fetch(`${base}/mock/keys?del=keya0001`)
       assert.equal(response.status, 200)
 
       await runtime.run(() => runtime.refresh({ sync: true }))
@@ -637,7 +637,7 @@ describe('多 key：一 key 一条路由一条凭据', () => {
 
       const providers = ctx.__entries.find((row) => row.ns === 'llm-pi-ai').value.providers
       assert.equal(providers[DEFAULT_ROUTE_KEY], undefined, '主路由必须删掉，不能拿别的 key 顶替')
-      assert.ok(providers['workbuddy2api-hub-others'], '其它 key 的路由不受影响')
+      assert.ok(providers['workbuddy2api-hub-key-b'], '其它 key 的路由不受影响')
 
       await fetch(`${base}/mock/reset`)
     } finally {

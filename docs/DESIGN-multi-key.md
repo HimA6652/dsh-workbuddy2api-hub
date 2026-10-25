@@ -42,9 +42,9 @@
 
 | 接口 | 是否随账号数变化 | 实测耗时（3 次） | 响应体积 |
 | --- | --- | --- | --- |
-| `GET /v1/models`（`bendi`，绑 2 个号） | 否 | 9.3 / 8.5 / 8.4 ms | 19 个模型，小 |
-| `GET /v1/models`（`others`，绑 1 个号） | 否 | 18.9 / 14.7 / 9.6 ms | 19 个模型 |
-| `GET /v1/models`（`pool-cn`，绑 **188** 个号） | 否 | 7.7 / 5.9 / 20.6 ms | 19 个模型 |
+| `GET /v1/models`（`key-a`，绑 2 个号） | 否 | 9.3 / 8.5 / 8.4 ms | 19 个模型，小 |
+| `GET /v1/models`（`key-b`，绑 1 个号） | 否 | 18.9 / 14.7 / 9.6 ms | 19 个模型 |
+| `GET /v1/models`（`key-c`，绑**一百多**个号） | 否 | 7.7 / 5.9 / 20.6 ms | 19 个模型 |
 | `GET /accounts` | 是（全量固定） | 358 / 320 / 290 ms | **4.2 MB**（308 行） |
 | `GET /usage/analytics?range=today` | 是（全量固定） | 845 / 238 / 334 ms | **5.3 MB**（5 个 key 行） |
 | `GET /v1/balance-summary` | 否 | 8.7 / 16.1 / 15.2 ms | 小 |
@@ -55,16 +55,16 @@
 `/v1/models` 与账号数无关的依据：`wb_proxy.py:18804` `_get_v1_models()` 走 `fetch_models(realm)` 的 realm 级目录缓存 + `model_entry()`，不遍历账号池；只有 `wb_settings.filter_models_by_key`（默认 off）和 `wb_settings.models_only_available`（默认 off）才会二次过滤，后者才逐模型查池。
 
 **由此得三条预算规则**：
-1. **自动拉取很便宜**（每 key 一次 ~10 ms、19 条模型）。`pool-cn` 绑 188 个号也照拉，性能无影响。
+1. **自动拉取很便宜**（每 key 一次 ~10 ms、19 条模型）。`key-c` 绑一百多个号也照拉，性能无影响。
 2. `/accounts` 与 `/usage/analytics` 是重接口且**与 key 无关**：每轮刷新各拉 **1 次**，所有 key 共用，绝不按 key 重复拉。
 3. per-key 余额用**已拉到的** `/accounts` 在本地求和，零额外请求。
 
 ### 0.5 主 key 余额怎么算（第一行两个数据）
 
-- **主 key 余额** = 该 key 绑定的账号在 `/accounts` 里的 `credits.remain` 之和。实测 `bendi` 绑 2 个号，两个都 `enabled`，`credits.remain` 合计 **3768.05**。
+- **主 key 余额** = 该 key 绑定的账号在 `/accounts` 里的 `credits.remain` 之和。实测 `key-a` 绑 2 个号，两个都 `enabled`，`credits.remain` 合计 **4127.33**。
 - **全局值** = `GET /v1/balance-summary` 的 `balance`（realm 级）。同一时刻实测 **588,777.91 credit**（`accounts_enabled: 190`、`accounts_with_credit_data: 190`）。
 - 两者差两个数量级是正常的：全局是整个号池 190 个号的合计，主 key 只能路由到自己绑的那 2 个号。**并排显示时要在 tooltip 里标清「全局 = 号池合计」，否则容易被理解成 bug。**
-- 展示口径（已定）：第一行写成 `主key余额 3768.05 ｜ 全局 588,777.91（190 号）`——全局后面必须带号数，否则两个数字差 150 倍看着像 bug。号数取 `/v1/balance-summary` 的 `accounts_enabled`，缺该字段时退回 `/accounts` 里 `credits.remain > 0` 的行数。
+- 展示口径（已定）：第一行写成 `主key余额 4127.33 ｜ 全局 588,777.91（190 号）`——全局后面必须带号数，否则两个数字差 150 倍看着像 bug。号数取 `/v1/balance-summary` 的 `accounts_enabled`，缺该字段时退回 `/accounts` 里 `credits.remain > 0` 的行数。
 - 性能：求和是对已拉到的列表做 O(绑定数) 遍历，**主 key 绑多少号都一样**；成本永远是那一份 `/accounts`（体积/耗时见 0.4，每轮 1 次，可 60s 缓存）。
 - 主 key 绑定的账号被删/禁用：只统计仍存在的账号，缺失时该数字显示 `—` 并在 tooltip 标「绑定账号 1/2 不可用」。
 - 主 key **一个号都没绑**（已定）：`主key余额` 显示 `—`，全局值照常显示，tooltip 标「主 key 未绑定账号」。
@@ -113,7 +113,7 @@
 
 ### 3.1 标识与命名（创建后不可变）
 
-- **主 key 冻结**：网关里名为 `bendi` 的 key 永远用 `routeKey = workbuddy2api-hub`、`apiKeyEnv = WORKBUDDY2API_HUB_API_KEY`。理由：已有会话、`agent-default-model`、`subagent-model-selection-settings.allowedModels` 都指向它，改了就断。
+- **主 key 冻结**：网关里名为 `key-a` 的 key 永远用 `routeKey = workbuddy2api-hub`、`apiKeyEnv = WORKBUDDY2API_HUB_API_KEY`。理由：已有会话、`agent-default-model`、`subagent-model-selection-settings.allowedModels` 都指向它，改了就断。
 - 其它 key：`routeKey = workbuddy2api-hub-<slug>`、`apiKeyEnv = WORKBUDDY2API_HUB_API_KEY_<SLUG>`；`slug` = key 名转小写、非字母数字换 `-`、去首尾 `-`、截断 24 字符。
 - 名字冲突（两个 key 都叫 `pool`）：第二个追加 key id 前 4 位 → `workbuddy2api-hub-pool-9f2a`（**用户已确认可接受**）。
 - `displayName` 用网关里给 key 起的名字（不用上游账号昵称——一个 key 可能绑近 200 个号）。
@@ -128,14 +128,14 @@
   "tab": "gateway",
   "intervalSeconds": 120,
   "maxKeys": 10,
-  "mainKeyId": "ae84c129b249",      // 主 key 的 hubKeyId
+  "mainKeyId": "0000000000a1",      // 主 key 的 hubKeyId
   "mainKeyMissing": false,          // 主 key 在网关里消失 → true
   "keys": [
     {
       // ← 持久化（只有这几项是用户意图）
-      "hubKeyId": "ae84c129b249",
-      "name": "bendi",
-      "masked": "91d3******0a86",
+      "hubKeyId": "0000000000a1",
+      "name": "key-a",
+      "masked": "0000******00a1",
       "routeKey": "workbuddy2api-hub",
       "apiKeyEnv": "WORKBUDDY2API_HUB_API_KEY",
       "pull": "auto",               // auto | manual
@@ -173,7 +173,7 @@
 | 其它 key | **`manual`** | **发现时自动拉一次**（拿到模型清单、写好路由），此后不进轮询；用户点「立即拉取」再拉一次，结果缓存 **60 秒**（同会话内重复点不重复请求）；UI 显示「上次拉取 12:03」 |
 | 用户手动改成 `auto` 的 key | `auto` | 与主 key 一样每轮拉 |
 
-- 「发现即拉一次」与「默认 manual」是两件事：前者保证新 key 一出现就能在 DSH 里选到模型，后者保证常驻轮询只跑主 key。`pool-cn`（绑 188 号）首次发现拉一次即可，实测 5–21 ms，无性能影响（0.4）。
+- 「发现即拉一次」与「默认 manual」是两件事：前者保证新 key 一出现就能在 DSH 里选到模型，后者保证常驻轮询只跑主 key。`key-c`（绑一百多号）首次发现拉一次即可，实测 5–21 ms，无性能影响（0.4）。
 - auto 模式错峰：第 `i` 个 auto key 延迟 `i × 1.5s`，避免同一秒并发多个请求。
 - 手动拉取的 60s 缓存只缓存 `/v1/models` 结果，不吃 `/accounts`；`/accounts` 的 60s 缓存是另一套（见 3.10），两者互不影响。
 - 依据 0.4：单次 `~10 ms`，即使 10 个 key 全 auto，一轮也就 +100 ms。
@@ -200,13 +200,13 @@ perKeyModels = GET /v1/models (Bearer = 该 key)
   2. `state.mainKeyMissing = true`。
   3. **绝不把别的 key 提上来顶替**（名字/凭据都不换）。
   4. 徽标第一行显示「主 key 已删除」。
-  5. 设置页红条：`主 key（bendi）已从网关删除；当前会话需要重新选择模型`，并提供「重新指定主 key」下拉（列出网关现有 key）。
+  5. 设置页红条：`主 key（key-a）已从网关删除；当前会话需要重新选择模型`，并提供「重新指定主 key」下拉（列出网关现有 key）。
   6. 会话侧：模型选择器进入「重新选择模型」状态——由 DSH 的 `routable:false` 自然触发，插件只负责删路由，不伪造替代项。
 
 ### 3.7 侧边栏徽标（三行）（1.2.0 改成三行 + 点击副窗、数字按 key 拆，见 §8.2）
 
 ```
-● WorkBuddy   主key余额 3768.05 ｜ 全局 588,777.91（190 号）   ← 第一行（两个数据）
+● WorkBuddy   主key余额 4127.33 ｜ 全局 588,777.91（190 号）   ← 第一行（两个数据）
 今日   42.8M tokens · 40.92 积分 · ¥6.25
 本周   249.9M tokens · 456.27 积分 · ¥29.51
 ```
@@ -214,7 +214,7 @@ perKeyModels = GET /v1/models (Bearer = 该 key)
 - 第一行：`主key余额` = 主 key 绑定账号 `credits.remain` 之和、`全局` = `/v1/balance-summary` 的 `balance`（含号数）；口径与缺失处置**全部见 0.5**，本节只管排版。
 - 第二 / 三行沿用 1.0.5 的 `usageRow`（左标签、右数字组，`marginLeft:auto` 右对齐）。
 - tooltip：先列当前会话所用的那个 key 的数据，再换行列出**全部 key**（每 key 一行，`●` 标当前，`manual` 未拉取的显示 `—（未拉取）`）。
-- 当前会话用的不是网关模型（`stepfun`/`others`/内置模型）→ 第一行与 tooltip 的「当前」按 **主 key** 显示。
+- 当前会话用的不是网关模型（`stepfun`/`key-b`/内置模型）→ 第一行与 tooltip 的「当前」按 **主 key** 显示。
 - 切会话不新增请求（数据来自已有快照）。
 
 ### 3.8 勾选与「同步到其他 key」
@@ -259,7 +259,7 @@ perKeyModels = GET /v1/models (Bearer = 该 key)
 | `lib/hub.js` | 新增 `keySlug()`、`routeKeyFor()`、`apiKeyEnvFor()`、`uniqueRouteKey()`、`mainKeyBalance(accounts, boundIds)`、`pickKeyUsage(analyticsRows, hubKeyId)`、`isSyntheticUsageRow(row)`；`buildRouteModels` 支持传入单 key 的模型数组；`summarizeUsage` 增加 per-key 视图 |
 | `lib/index.js` | `DEFAULT_STATE` 增 `keys/mainKeyId/mainKeyMissing/maxKeys`；`migrateState()`（5 节一次性迁移）；`reconcileKeys()`（3.3 六步）；`refresh()` 改为「一次取共用数据 → 逐 key 处理」；`resolveApiKey` 改成按 key；`syncModelsToDsh` 合成一次 mutate 写 N 条路由；`snapshot()` 按 3.6 字段清单输出；新接口 `POST /keys/pull`、`POST /keys/pull-mode`、`POST /keys/selection`、`POST /keys/sync-selection`、`POST /keys/main`；`GET /dashboard-url` 不变 |
 | `client/client.js` | 设置页新增「Key 列表」卡片（每 key 一块，3.8）；徽标第一行改双数据 + tooltip 全 key（3.7）；订阅 `uiSession` + `modelDirectories` 定位当前会话的 key；`routable:false` 时显示「重新选择模型」提示 |
-| `scripts/mock-hub.mjs` | 造 3 个 key（`bendi`/`others`/`pool-cn`）+ `/settings/reveal` + `/usage/analytics` + 可配置账号数（2 / 1 / 188）+ `/mock/keys/add|remove|disable` + `deleted_api_keys` |
+| `scripts/mock-hub.mjs` | 造 3 个 key（`key-a`/`key-b`/`key-c`）+ `/settings/reveal` + `/usage/analytics` + 可配置账号数（2 / 1 / 任意多）+ `/mock/keys/add|remove|disable` + `deleted_api_keys` |
 | `scripts/smoke-live.mjs` | 多 key 只读体检（key 数、每 key 模型数、主 key 余额、per-key 用量） |
 | `tests/*.test.mjs` | 见第 6 节 |
 | `package.json` | `version` → `1.1.0`（`tests/host.test.mjs` 的 `PLUGIN_VERSION` 断言同步） |
@@ -269,7 +269,7 @@ perKeyModels = GET /v1/models (Bearer = 该 key)
 
 ## 5. 兼容与迁移
 
-- **迁移只在 `state.keys` 不存在时执行一次**：用当前生效的 API Key 反查是哪个面板 key（凭据里已有明文 → 与 `/settings/reveal` 比对；**这是唯一豁免 3.3 第 4 步「`masked` 未变不取明文」的场景**，只跑一次），找到就把它设为主 key，`routeKey` / `apiKeyEnv` 保持 1.0.12 原值；找不到就把 `bendi` 设为主 key。迁移后立刻写回 v2 状态，不会重跑。
+- **迁移只在 `state.keys` 不存在时执行一次**：用当前生效的 API Key 反查是哪个面板 key（凭据里已有明文 → 与 `/settings/reveal` 比对；**这是唯一豁免 3.3 第 4 步「`masked` 未变不取明文」的场景**，只跑一次），找到就把它设为主 key，`routeKey` / `apiKeyEnv` 保持 1.0.12 原值；找不到就把 `key-a` 设为主 key。迁移后立刻写回 v2 状态，不会重跑。
 - 顶层 `selection` / `lastModelIds` / `retired` / `lastSyncAt` / `lastSyncError` / `lastSyncCount` / `sync` **保留并继续写入**（= 主 key 镜像），这样回滚到 1.0.12 时行为不变、已有会话不断。
 - 回滚到 1.0.12：其它 key 的 `providers.workbuddy2api-hub-*` 变成孤儿路由（旧版不刷新、也不会删），模型仍可选，只是不再更新。文档里给出「一键清理孤儿路由」的手工命令。
 - 凭据命名冲突：`WORKBUDDY2API_HUB_API_KEY_<SLUG>` 若已被用户手填成别的值 → 不覆盖，标 `conflict` 并在设置页提示。
@@ -278,7 +278,7 @@ perKeyModels = GET /v1/models (Bearer = 该 key)
 
 ## 6. 测试点
 
-1. 命名：`bendi`→`workbuddy2api-hub`；`pool-cn`→`workbuddy2api-hub-pool-cn`；同名冲突→追加 id 前 4 位；slug 处理中文/空格/超长。
+1. 命名：`key-a`→`workbuddy2api-hub`；`key-c`→`workbuddy2api-hub-key-c`；同名冲突→追加 id 前 4 位；slug 处理中文/空格/超长。
 2. 发现同步：新增 key 自动建条目 + 取明文 + 写凭据；`masked` 变→重取；`masked` 未变→不取；删除→摘路由留条目；`enabled:false`→摘路由；超 `maxKeys`→`skipped`。
 3. 拉取：主 key auto 进轮询；其余 manual 不进；手动拉取 60s 内第二次点击不发请求；auto 错峰间隔。
 4. 模型集：默认全选（`seedSelection`）；`copySelection` 只在「同步勾选」时用，且目标 key 独有的模型保留它自己的勾选；白名单非空时再取交集；模型名带倍率；`retired` 宽限期按 key 独立。
@@ -297,7 +297,7 @@ perKeyModels = GET /v1/models (Bearer = 该 key)
 | # | 问题 | 结论 | 依据 |
 | --- | --- | --- | --- |
 | 1 | 换模型是否要顺带改历史会话 | **不改** | 0.1（不影响上下文） |
-| 2 | `pool-cn` 是否自动拉 | **~~发现时拉一次，之后归 `manual` 不再轮询~~（8.1 已推翻：现在一律每轮都拉）** | 3.4 + 0.4（5–21 ms，与账号数无关） |
+| 2 | `key-c` 是否自动拉 | **~~发现时拉一次，之后归 `manual` 不再轮询~~（8.1 已推翻：现在一律每轮都拉）** | 3.4 + 0.4（5–21 ms，与账号数无关） |
 | 3 | 徽标第一行口径 | **主 key 绑号余额之和 + 全局值** | 0.5 |
 | 4 | 非主 key 默认拉取方式 | **~~`manual`~~（8.1 已推翻：没有 auto/manual 之分）** | 3.4 |
 | 5 | 是否写 `allowedModels` | **默认不写**，设置页给显式按钮 | 0.6 |
@@ -313,7 +313,7 @@ perKeyModels = GET /v1/models (Bearer = 该 key)
 
 3.4 那一套「主 key 自动、其余手动、60 秒缓存」在 1.2.0 删除。依据是本文件 0.4 已经量到的结论
 ——每 key 一次 `/v1/models`，**耗时与绑定账号数无关**（1 号 `7.8 ms` / 2 号 `14.8 ms` /
-188 号 `15.4 ms`，抖动 3–32 ms），账号数只撑大全量接口的响应体（`/accounts` 4.4 MB、
+一百多号 `15.4 ms`，抖动 3–32 ms），账号数只撑大全量接口的响应体（`/accounts` 4.4 MB、
 `/usage/analytics` 5.5 MB，每轮各拉一次，与 key 数无关）。
 
 所以 1.2.0 起**每条 key 每轮都拉**：`refresh()` 的 key 循环无条件调用 `refreshKeyModels()`，
@@ -348,7 +348,7 @@ perKeyModels = GET /v1/models (Bearer = 该 key)
   网关给什么就显示什么；
   上方两个格子放「这条 key 的余额」与「全部账号」，底部「打开面板」「关闭」。
   原来塞在弹窗里的今日/本周两块删掉（徽标上已经有了），不做重复展示。
-- 数字统一两位小数（`72.30M` / `1.20k` / `¥10.39` / `1435.83`），k/M/B 缩写保留尾零。
+- 数字统一两位小数（`72.30M` / `1.20k` / `¥10.39` / `2841.06`），k/M/B 缩写保留尾零。
 - **数据全是网关原样给的**，本地只做两件事：换两位小数、算 `errors / requests` 的成功率。
   每条 key 的那四个数来自 `/usage/analytics` 里 gateway 按 API Key 分好的 `window`
   （= 面板「数据看板 → 用量明细 → 按 API Key」那张表），「总计」来自 `/usage`。
@@ -423,6 +423,6 @@ perKeyModels = GET /v1/models (Bearer = 该 key)
 
 ## 9. 未决
 
-原表 #2（`pool-cn` 是否自动拉）、#4（非主 key 默认拉取方式）已被 8.1 推翻：现在没有
+原表 #2（`key-c` 是否自动拉）、#4（非主 key 默认拉取方式）已被 8.1 推翻：现在没有
 auto/manual 之分，每条 key 每轮都拉。其余各条仍然有效。
 

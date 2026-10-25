@@ -129,26 +129,26 @@ function weekStartStamp() {
 function initialKeys(config) {
   return [
     {
-      id: 'bendi0001',
-      name: 'bendi',
-      masked: 'bend******0001',
+      id: 'keya0001',
+      name: 'key-a',
+      masked: 'key-******0001',
       accounts: ['mock-uid-1', 'mock-uid-2'],
       secret: config.apiKey,
       enabled: true,
       source: 'panel',
     },
     {
-      id: 'others001',
-      name: 'others',
+      id: 'keyb001',
+      name: 'key-b',
       masked: 'othe******0001',
       accounts: ['mock-uid-3'],
-      secret: 'mock-api-key-others',
+      secret: 'mock-api-key-key-b',
       enabled: true,
       source: 'panel',
     },
     {
-      id: 'poolcn001',
-      name: 'pool-cn',
+      id: 'keyc0001',
+      name: 'key-c',
       masked: 'pool******0001',
       accounts: ['mock-uid-4', 'mock-uid-5'],
       secret: 'mock-api-key-pool',
@@ -160,15 +160,15 @@ function initialKeys(config) {
 
 /** 一条 key 在不同窗口下的用量（/usage/analytics 用）。 */
 const KEY_USAGE = {
-  bendi0001: {
+  keya0001: {
     today: { requests: 92, errors: 2, total_tokens: 8884081, credit: 12.66, cost_cny: 1.4595 },
     all_time: { requests: 2815, total_tokens: 150000000, credit: 300.5, cost_cny: 34.2 },
   },
-  others001: {
+  keyb001: {
     today: { requests: 0, errors: 0, total_tokens: 0, credit: 0, cost_cny: 0 },
     all_time: { requests: 647, total_tokens: 41000000, credit: 62.4, cost_cny: 7.1 },
   },
-  poolcn001: {
+  keyc0001: {
     today: { requests: 6, errors: 0, total_tokens: 213, credit: 0, cost_cny: 0 },
     all_time: { requests: 6, total_tokens: 213, credit: 0, cost_cny: 0 },
   },
@@ -416,9 +416,9 @@ async function handle(request, response, config, state) {
 
   if (path === '/v1/models') {
     if (!requireAccess()) return
-    // pool-cn 只看得到 hy3：per-key 模型集是这次多 key 的核心差异，得能测出来。
+    // key-c 只看得到 hy3：per-key 模型集是这次多 key 的核心差异，得能测出来。
     const scoped = state.keys.find((key) => key.secret === bearer)
-    const list = scoped?.id === 'poolcn001' ? state.models.filter((m) => m.id === 'hy3') : state.models
+    const list = scoped?.id === 'keyc0001' ? state.models.filter((m) => m.id === 'hy3') : state.models
     send(response, 200, { object: 'list', data: list })
     return
   }
@@ -575,7 +575,7 @@ async function handle(request, response, config, state) {
           tokenExpired: false,
           needRelogin: false,
           inCooldown: false,
-          credits: { remain: 1347.33, used: 665.67, size: 2013 },
+          credits: { remain: 2752.56, used: 665.67, size: 2013 },
         },
         {
           uid: 'mock-uid-2',

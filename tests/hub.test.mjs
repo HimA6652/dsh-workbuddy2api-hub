@@ -454,7 +454,7 @@ test('summarizeAccounts：谁要重登、谁在冷却、还剩几天', () => {
           platform: 'CLI',
           enabled: true,
           expiresAt: Math.floor(now / 1000) + 27 * 86400,
-          credits: { remain: 1347.331 },
+          credits: { remain: 2752.561 },
         },
         {
           nickname: 'b',
@@ -475,7 +475,7 @@ test('summarizeAccounts：谁要重登、谁在冷却、还剩几天', () => {
   assert.equal(summary.needRelogin, 1)
   assert.equal(summary.inCooldown, 1)
   assert.equal(summary.expired, 1)
-  assert.equal(summary.totalCredits, 1435.83)
+  assert.equal(summary.totalCredits, 2841.06)
   assert.equal(summary.accounts[0].daysLeft, 27)
   assert.equal(summary.accounts[1].ready, false)
   assert.equal(summary.accounts[2].credits, null)
@@ -664,27 +664,27 @@ test('pickBaseUrl', () => {
 /* ------------------------------ 多 key ------------------------------ */
 
 test('keySlug / allocateRouteKey / apiKeyEnvFor：一 key 一路由一凭据', () => {
-  assert.equal(keySlug('bendi'), 'bendi')
-  assert.equal(keySlug('Pool-CN'), 'pool-cn')
+  assert.equal(keySlug('key-a'), 'key-a')
+  assert.equal(keySlug('Key-C'), 'key-c')
   assert.equal(keySlug('  a  b  '), 'a-b', '连续符号折叠成一个连字符')
   assert.equal(keySlug('中文名字', 'abcd1234ef'), 'abcd1234', '中文名用 id 前 8 位兜底，不能拼出空 slug')
   assert.equal(keySlug('', ''), 'key')
 
   // 主 key 恒定，不跟着名字走——否则改个名就把会话里的模型搞没了。
-  assert.equal(allocateRouteKey('bendi', 'bendi0001', [], true), MAIN_ROUTE_KEY)
-  assert.equal(allocateRouteKey('Pool CN', 'poolcn001'), 'workbuddy2api-hub-pool-cn')
+  assert.equal(allocateRouteKey('key-a', 'keya0001', [], true), MAIN_ROUTE_KEY)
+  assert.equal(allocateRouteKey('Key C', 'keyc0001'), 'workbuddy2api-hub-key-c')
   // 撞名：先加 id 前 4 位，再撞加序号。
   assert.equal(
-    allocateRouteKey('pool-cn', 'abcd9999', ['workbuddy2api-hub-pool-cn']),
-    'workbuddy2api-hub-pool-cn-abcd',
+    allocateRouteKey('key-c', 'abcd9999', ['workbuddy2api-hub-key-c']),
+    'workbuddy2api-hub-key-c-abcd',
   )
   assert.equal(
-    allocateRouteKey('pool-cn', 'abcd9999', ['workbuddy2api-hub-pool-cn', 'workbuddy2api-hub-pool-cn-abcd']),
-    'workbuddy2api-hub-pool-cn-abcd-2',
+    allocateRouteKey('key-c', 'abcd9999', ['workbuddy2api-hub-key-c', 'workbuddy2api-hub-key-c-abcd']),
+    'workbuddy2api-hub-key-c-abcd-2',
   )
 
   assert.equal(apiKeyEnvFor(MAIN_ROUTE_KEY), MAIN_API_KEY_ENV)
-  assert.equal(apiKeyEnvFor('workbuddy2api-hub-pool-cn'), 'WORKBUDDY2API_HUB_API_KEY_POOL_CN')
+  assert.equal(apiKeyEnvFor('workbuddy2api-hub-key-c'), 'WORKBUDDY2API_HUB_API_KEY_KEY_C')
   assert.equal(apiKeyEnvFor('workbuddy2api-hub-x'), 'WORKBUDDY2API_HUB_API_KEY_X')
 })
 
@@ -692,15 +692,15 @@ test('normalizeHubKeyRow / keyRowsOf', () => {
   assert.equal(normalizeHubKeyRow(null), null)
   assert.equal(normalizeHubKeyRow({ name: 'x' }), null, '没有 id 的行直接丢掉')
   const row = normalizeHubKeyRow({
-    id: ' bendi0001 ',
-    name: ' bendi ',
-    masked: 'bend******0001',
+    id: ' keya0001 ',
+    name: ' key-a ',
+    masked: 'key-******0001',
     enabled: false,
     accounts: ['a', 'b', 3],
     models: ['hy3'],
   })
-  assert.equal(row.hubKeyId, 'bendi0001')
-  assert.equal(row.name, 'bendi')
+  assert.equal(row.hubKeyId, 'keya0001')
+  assert.equal(row.name, 'key-a')
   assert.equal(row.enabled, false, 'enabled:false 才是关，缺字段算开')
   assert.deepEqual(row.accounts, ['a', 'b'], '非字符串的账号 id 滤掉')
   assert.deepEqual(row.models, ['hy3'])
@@ -715,14 +715,14 @@ test('normalizeHubKeyRow / keyRowsOf', () => {
 test('mainKeyBalance：主 key 余额 = 它绑定的账号之和', () => {
   const accounts = {
     accounts: [
-      { uid: 'u1', enabled: true, credits: { remain: 1347.33 } },
+      { uid: 'u1', enabled: true, credits: { remain: 2752.56 } },
       { uid: 'u2', enabled: true, credits: { remain: 88.5 } },
       { uid: 'u3', enabled: false, credits: { remain: 999 } },
       { uid: 'u4', enabled: true },
     ],
   }
   const sum = mainKeyBalance(accounts, ['u1', 'u2'])
-  assert.equal(sum.remain, 1435.83)
+  assert.equal(sum.remain, 2841.06)
   assert.equal(sum.bound, 2)
   assert.equal(sum.found, 2)
   assert.equal(sum.enabled, 2)
@@ -730,7 +730,7 @@ test('mainKeyBalance：主 key 余额 = 它绑定的账号之和', () => {
 
   // 绑了两个号但只找到一个：missing 要如实算，界面才好提示。
   const partial = mainKeyBalance(accounts, ['u1', 'gone'])
-  assert.equal(partial.remain, 1347.33)
+  assert.equal(partial.remain, 2752.56)
   assert.equal(partial.missing, 1)
 
   // 绑了但账号被停用：不算进余额。
@@ -745,8 +745,8 @@ test('mainKeyBalance：主 key 余额 = 它绑定的账号之和', () => {
 test('pickKeyUsage / isSyntheticUsageRow / summarizeAnalyticsWindow', () => {
   const rows = [
     {
-      key: 'bendi0001',
-      name: 'bendi',
+      key: 'keya0001',
+      name: 'key-a',
       source: 'panel',
       window: { requests: 92, errors: 2, total_tokens: 8884081, credit: 12.66, cost_cny: 1.4595 },
       all_time: { requests: 2815, total_tokens: 150000000, credit: 300.5 },
@@ -761,7 +761,7 @@ test('pickKeyUsage / isSyntheticUsageRow / summarizeAnalyticsWindow', () => {
   assert.equal(isSyntheticUsageRow({ key: '', source: 'panel' }), true)
   assert.equal(isSyntheticUsageRow(null), true)
 
-  const usage = pickKeyUsage(rows, 'bendi0001')
+  const usage = pickKeyUsage(rows, 'keya0001')
   assert.equal(usage.requests, 92)
   assert.equal(usage.errorRate, 2.2)
   assert.equal(usage.totalTokens, 8884081)
@@ -771,7 +771,7 @@ test('pickKeyUsage / isSyntheticUsageRow / summarizeAnalyticsWindow', () => {
   assert.equal(pickKeyUsage(rows, '__no_key__'), null, '合成桶永远取不到')
   assert.equal(pickKeyUsage(rows, 'nope'), null)
   assert.equal(pickKeyUsage(rows, ''), null)
-  assert.equal(pickKeyUsage(null, 'bendi0001'), null)
+  assert.equal(pickKeyUsage(null, 'keya0001'), null)
 
   assert.deepEqual(summarizeAnalyticsWindow({ window: { since: 'a', until: 'b' }, realm: 'all' }), {
     since: 'a',
