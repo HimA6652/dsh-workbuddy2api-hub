@@ -84,9 +84,16 @@ if (previous !== version) {
   const hostTestPath = resolve(ROOT, 'tests/host.test.mjs')
   const hostTest = readFileSync(hostTestPath, 'utf8')
   const patched = hostTest.replace(/PLUGIN_VERSION, '\d+\.\d+\.\d+'/, `PLUGIN_VERSION, '${version}'`)
-  if (patched === hostTest) fail('tests/host.test.mjs 里没找到 PLUGIN_VERSION 断言，手动改一下再跑')
-  writeFileSync(hostTestPath, patched)
-  console.log(`✔ 版本 ${previous} → ${version}`)
+  if (patched === hostTest) {
+    // 测试里可能用的是「匹配语义化版本」的正则而不是字面量——那种写法天生适配任何版本，不用改。
+    if (!/PLUGIN_VERSION,\s*\/\^\\d\+\\\.\\d\+\\\.\\d\+\$/.test(hostTest)) {
+      fail('tests/host.test.mjs 里既没有字面量也没有正则断言，手动改一下再跑')
+    }
+    console.log(`✔ 版本 ${previous} → ${version}（host.test 用正则校验，不用改）`)
+  } else {
+    writeFileSync(hostTestPath, patched)
+    console.log(`✔ 版本 ${previous} → ${version}`)
+  }
 } else {
   console.log(`✔ package.json 已经是 ${version}，只补标签`)
 }
@@ -117,7 +124,13 @@ if (!noPublish) {
 
 // 7. 提交 + 打标签 + 推送
 run('git', ['add', '-A'])
-run('git', ['commit', '-m', `chore(release): v${version}`])
+// 版本号若早就 amend 进功能提交（或手动改过），这里就没什么可提交的。
+// 空 commit 会让脚本当场退出，把后面的标签和推送一起带走——1.2.0 那次就是这么丢的。
+if (outputShell('git diff --cached --name-only') !== '') {
+  run('git', ['commit', '-m', `chore(release): v${version}`])
+} else {
+  console.log('✔ 工作区没有待提交的改动（版本号已在别处改过），跳过 commit')
+}
 run('git', ['tag', '-a', `v${version}`, '-m', `v${version}`])
 
 if (noPush) {
