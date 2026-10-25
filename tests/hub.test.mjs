@@ -39,7 +39,6 @@ import {
   modelReasoningEfforts,
   normalizeBaseUrl,
   normalizeHubKeyRow,
-  normalizePullMode,
   normalizePwd,
   normalizeTab,
   normalizeUsageRange,
@@ -172,41 +171,13 @@ test('normalizeUsageRange：hub 只认 range，不认 hours', () => {
   assert.equal(usageQuery('nope'), '/usage?range=today')
 })
 
-test('buildDashboardUrl：与用户给出的地址形态一致', () => {
-  assert.equal(
-    buildDashboardUrl('http://127.0.0.1:8788', 'admin', 'gateway'),
-    'http://127.0.0.1:8788/?pwd=admin&tab=gateway',
-  )
-  assert.equal(
-    buildDashboardUrl('http://127.0.0.1:8788/', 'admin', 'accounts'),
-    'http://127.0.0.1:8788/?pwd=admin&tab=accounts',
-  )
-  // 没配密码就不带 pwd 参数（避免把空密码发出去）。
-  assert.equal(buildDashboardUrl('http://127.0.0.1:8788', '', 'gateway'), 'http://127.0.0.1:8788/?tab=gateway')
-  assert.equal(buildDashboardUrl('', 'admin', 'gateway'), '')
-  // 密码里有特殊字符必须被正确转义。
-  assert.match(buildDashboardUrl('http://127.0.0.1:8788', 'p@ss word&x', 'logs'), /pwd=p%40ss\+word%26x/)
-})
-
-test('buildDashboardUrl：includePwd 为 false 时不把密码拼进链接', () => {
-  // 默认（插件侧 `dashboardIncludePwd: false`）走这条：密码不进 URL，
-  // 于是也不会被 hub 写进 logs/service.log、不进浏览器历史。
-  assert.equal(
-    buildDashboardUrl('http://127.0.0.1:8788', 'admin', 'gateway', { includePwd: false }),
-    'http://127.0.0.1:8788/?tab=gateway',
-  )
-  // 显式 true 与省略等价（纯函数层保持老行为，由插件决定传什么）。
-  assert.equal(
-    buildDashboardUrl('http://127.0.0.1:8788', 'admin', 'accounts', { includePwd: true }),
-    'http://127.0.0.1:8788/?pwd=admin&tab=accounts',
-  )
-  assert.equal(
-    buildDashboardUrl('http://127.0.0.1:8788', 'admin', 'accounts', {}),
-    'http://127.0.0.1:8788/?pwd=admin&tab=accounts',
-  )
-  // 空 options 对象、密码为空、地址为空都不能炸。
-  assert.equal(buildDashboardUrl('', 'admin', 'gateway', { includePwd: false }), '')
-  assert.equal(buildDashboardUrl('http://127.0.0.1:8788', '', 'gateway', { includePwd: true }), 'http://127.0.0.1:8788/?tab=gateway')
+test('buildDashboardUrl：只带页签，密码永远不拼进链接', () => {
+  assert.equal(buildDashboardUrl('http://127.0.0.1:8788', 'gateway'), 'http://127.0.0.1:8788/?tab=gateway')
+  assert.equal(buildDashboardUrl('http://127.0.0.1:8788/', 'accounts'), 'http://127.0.0.1:8788/?tab=accounts')
+  // 页签不合法就落回默认的 gateway；地址无效给空串。
+  assert.equal(buildDashboardUrl('http://127.0.0.1:8788', 'nope'), 'http://127.0.0.1:8788/?tab=gateway')
+  assert.equal(buildDashboardUrl('http://127.0.0.1:8788', 'LOGS'), 'http://127.0.0.1:8788/?tab=logs')
+  assert.equal(buildDashboardUrl('', 'gateway'), '')
 })
 
 /* -------------------------------- 错误分类 ------------------------------- */
@@ -717,13 +688,7 @@ test('keySlug / allocateRouteKey / apiKeyEnvFor：一 key 一路由一凭据', (
   assert.equal(apiKeyEnvFor('workbuddy2api-hub-x'), 'WORKBUDDY2API_HUB_API_KEY_X')
 })
 
-test('normalizePullMode / normalizeHubKeyRow / keyRowsOf', () => {
-  assert.equal(normalizePullMode('AUTO'), 'auto')
-  assert.equal(normalizePullMode(' manual '), 'manual')
-  assert.equal(normalizePullMode('nope'), 'manual', '默认 manual：多 key 下别自动把网关打爆')
-  assert.equal(normalizePullMode(undefined, 'auto'), 'auto')
-  assert.equal(normalizePullMode('nope', 'nope'), 'manual', '兜底值非法时退回 manual')
-
+test('normalizeHubKeyRow / keyRowsOf', () => {
   assert.equal(normalizeHubKeyRow(null), null)
   assert.equal(normalizeHubKeyRow({ name: 'x' }), null, '没有 id 的行直接丢掉')
   const row = normalizeHubKeyRow({

@@ -17,10 +17,38 @@ bundle 末尾挂了一串 `exports.__*`，只为测试和手工排查用，宿�
 | `__palette` / `__styles` | 主题令牌与样式对象，测「不许写死颜色」 |
 | `__HubPanel` / `__HubFooter` | 两个 React 组件本体，可直接调用拿元素树 |
 | `__sortRowsByName` / `__footerSummary` | 表格排序与徽标取值（含 `—` 兜底） |
+| `__css` / `__injectStyles()` | 插件自己那套 CSS 与注入函数（注入是幂等的，重复调用不会插第二份 `<style>`） |
+| `__HubGlyph` / `__HubOverlay` | 徽标图标（内联 SVG）与**副窗外壳**：`{ open, onClose, anchor, title, closeLabel }`，`anchor` 是点击时 `getBoundingClientRect()` 现算出来的 `{ left, bottom }`。**不再用宿主 `Modal`**——它是居中模态，会压住整个侧边栏；这里要的是从底栏长出来的轻量副窗，点遮罩或 `×` 关闭 |
+| `__keyFoldOpen` | 折叠默认值：没点过按 `isMain`（主 key 摊开、其余收起），点过照表里记录 |
+| `__realmText` / `__apiKeySourceText` | 概览两格的中文口径（`cn` → 国内版、`credentials` → 凭据库…），值抄的是网关界面自己的叫法 |
+| `__syncedModelCount` | 同步行那个分子：遍历 `keys[].models` 按 `id` 收进 `Set`，取**所有 key 启用模型的并集**。`enabled:false` 与 `retired:true` 不算；拿不到 `models` 才回落 `snapshot.lastSyncCount`。**别改回 `lastSyncCount`**——那是 `syncRoutesToDsh()` 里 `count += routeModels.length` 逐条累加，同一条模型被几条 key 勾上会重复计 |
+| `__keyListOf` / `__keyByProvider` / `__mainKeyOf` / `__balanceLines` | key 列表、按 providerId 找 key、主 key、余额行的取值函数 |
+| `__providerSnapshot` / `__setProviderState` / `__attachProviderSource` | 当前会话 provider 的模块内状态，测「切会话时徽标跟着换数」用 |
 
 测试里用 `node:vm` 把 `client.js` 丢进 `runInNewContext`，沙箱只需补 `URL` / `URLSearchParams` / `document` / `fetch` / 定时器 / `AbortSignal`。假 React 的 `createElement` 返回 `{ type, props, children }`，所以 `__HubFooter({ t, wide: true })` 能直接断言行结构和文案，不用起浏览器。
 
-注意：断言 children 数量前先过滤 `null` —— `h('div', p, a, b, cond ? c : null)` 在假 React 里会产生 `null` 项。
+几处踩过的坑：
+
+- **假 React 要有 `Fragment`**：`__HubFooter` 返回的是 `h(react.Fragment, null, badge, overlay)`，沙箱漏了 `Fragment` 会得到 undefined type。
+- **断言 children 数量前先过滤 `null`**：`h('div', p, a, b, cond ? c : null)` 会产生 `null` 项（徽标收起态就是 `[glyph, null]`）。
+- **断言整行文字要先展平**：`node.children.join('')` 对嵌套节点只能得到 `[object Object]`，得写个递归 `flatten()` 再 `join('')`。
+
+## 数字从哪来（别自己造）
+
+徽标与副窗里每个数都能指回一个上游字段，改代码时别在这里加聚合：
+
+| 显示位置 | 上游来源 | 本地做了什么 |
+| --- | --- | --- |
+| 徽标第一行「该 key 余额 / 总余额」 | 左：`keys[].balance.remain`（`keyProjections()` 里 `mainKeyBalance(this.accountsRaw, key.accounts)` 求和）；右：`balance.balance`（`/v1/balance-summary` 整域） | 两位小数；账号不在 `/accounts` 里给 `null`，前端画 `—`，**不报 0** |
+| 徽标「今日 / 本周」、副窗每条 key 那两行 | `/usage/analytics?range=` 的 `keys[].window`：`requests / errors / prompt_tokens / completion_tokens / total_tokens / credit / cost_cny`（= 面板「用量明细 → 按 API Key」那张表） | `round2` 两位小数；`errorRate = errors / requests` |
+| 副窗「总计」 | `/usage?range=` 的整域汇总（`summarizeUsage`，= 面板「数据看板」顶部那行） | 两位小数 |
+| 概览「已同步 N/M 模型」 | 分子 `syncedModelCount()`（各 key `models` 的并集去重）、分母 `snapshot.counts.total` | 去重计数 |
+| 概览「额度 / 已启用 / 平均倍率 / 账号」 | `balance.balance`、`counts.enabled`、`averageRate`、`accounts.enabled/total` | 四位里只有倍率是网关给的原始浮点 |
+
+2026-10-25 实测（端口 53007，`pluginVersion 1.2.0`）：三条 key 的 `window` 相加
+`168,548,549 tokens / 706.71 积分 / ¥49.31` 与整域**三项差都是 0**（三条 key 的账号不重叠），
+所以「总计」直接取整域、不自己求和。哪天网关允许一个账号挂到多条 key 上，这里就会不等
+——那时以整域（面板顶部那行）为准。
 
 ## 配色：只能用 `--dsw-alias-*`
 
@@ -151,5 +179,5 @@ CI 依次检查：条目数 ≤3 → 抓 `package.json` 验 `dsh.bundle` → 仓
 ## 改代码时的三个坑
 
 - **宿主侧 `lib/*.js` 改完必须重启 DSH**：`cordis-plugin-loader` 用裸 `await import(pkg)`，没有 cache-busting，ESM 缓存会一直给旧模块。
-- **`client/client.js` 可以热更**：`dsh-client-hmr` 会重新发布 bundle，但浏览器拿的是带 `rev` 的组合 URL（`plugins/??<pkg>/client.js&rev=<12位hash>`），`rev` 由文件 mtime/ctime/size 算出；不带 `rev` 或乱填一律 404。
+- **`client/client.js` 改完，没开 HMR 就得重启 DSH**：`dsh-client-modules` 在 `reconcilePackage()` 里把 bundle 和 baseline 读进内存，`rev`（mtime/ctime/size 算出的 12 位 hash）也在那一刻定死；HTML 引用的是 `plugins/??<pkg>/client.js&rev=<启动时rev>`，响应头带 `public, max-age=31536000, immutable`。`rebuilt(id)` 是 HMR watch 的注册钩子——**没有 watcher 在跟，就不会有第二次读取**，刷新页面拿到的还是启动时那份。本机实测过：改完刷新页面看不到任何变化，重启才生效。装了 `dsh-client-hmr` 并在 watch 下跑，才会走「重新发布 bundle → 新 `rev`」那条路。
 - **`package.json` 的 `scripts` 里别出现 `install` / `postinstall` / `prepublish`**：`install` 是 npm 的生命周期钩子，别人 `npm i` 你这个包时会被自动执行——我们最早那个 `"install": "node scripts/install-local.mjs"` 就因此把**装包人的 profile 依赖**改指向了包自身所在的临时目录，插件列表直接显示「异常 / 包不可用」。安装脚本现在叫 `npm run link`。

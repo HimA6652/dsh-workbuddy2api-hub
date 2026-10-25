@@ -263,12 +263,11 @@ describe('插件 HTTP 接口', () => {
     try {
       const result = await expectCall(runtime, { url: `/workbuddy2api-hub/api/dashboard-url` })
       assert.equal(result.status, 200)
-      // 默认 `dashboardIncludePwd: false` —— 密码不进 URL，就不会被 hub 写进
-      // logs/service.log，也不进地址栏与浏览器历史。
+      // 密码永远不进 URL，就不会被 hub 写进 logs/service.log，也不进地址栏与历史。
       assert.equal(result.body.url, `${base}/?tab=gateway`)
       assert.equal(result.body.url.includes('pwd='), false)
       assert.equal(result.body.tab, 'gateway')
-      assert.equal(result.body.includePwd, false)
+      assert.equal('includePwd' in result.body, false, '这个开关已经整条删掉了')
 
       const remote = await expectCall(runtime, {
         url: `/workbuddy2api-hub/api/dashboard-url`,
@@ -281,9 +280,10 @@ describe('插件 HTTP 接口', () => {
     }
   })
 
-  test('打开 dashboardIncludePwd 之后深链才带 pwd', async () => {
+  test('dashboardIncludePwd 已删除：老前端再 POST 也进不去，深链永远不带 pwd', async () => {
     const { ctx, runtime } = await connected()
     try {
+      // 老版本设置页会把这两个字段带上；服务端直接忽略，不再回写。
       const saved = await expectCall(runtime, {
         method: 'POST',
         url: '/workbuddy2api-hub/api/config',
@@ -291,21 +291,11 @@ describe('插件 HTTP 接口', () => {
         body: { dashboardIncludePwd: true },
       })
       assert.equal(saved.status, 200)
-      assert.equal(saved.body.dashboardIncludePwd, true)
+      assert.equal('dashboardIncludePwd' in saved.body, false, '快照里不该再有这个字段')
 
       const result = await expectCall(runtime, { url: `/workbuddy2api-hub/api/dashboard-url` })
-      assert.equal(result.body.url, `${base}/?pwd=admin&tab=gateway`)
-      assert.equal(result.body.includePwd, true)
-
-      // 关回去，验证开关是双向的。
-      await expectCall(runtime, {
-        method: 'POST',
-        url: '/workbuddy2api-hub/api/config',
-        headers: { origin: base, host: new URL(base).host, 'sec-fetch-site': 'same-origin' },
-        body: { dashboardIncludePwd: false },
-      })
-      const back = await expectCall(runtime, { url: `/workbuddy2api-hub/api/dashboard-url` })
-      assert.equal(back.body.url, `${base}/?tab=gateway`)
+      assert.equal(result.body.url, `${base}/?tab=gateway`)
+      assert.equal(result.body.url.includes('pwd='), false)
     } finally {
       ctx.__dispose()
     }
@@ -506,15 +496,13 @@ describe('多 key：一 key 一条路由一条凭据', () => {
       assert.equal(bendi.isMain, true)
       assert.equal(bendi.routeKey, DEFAULT_ROUTE_KEY)
       assert.equal(bendi.apiKeyEnv, 'WORKBUDDY2API_HUB_API_KEY')
-      assert.equal(bendi.pull, 'auto', '主 key 常驻自动拉')
 
-      assert.equal(others.pull, 'manual', '其余 key 默认手动，别每轮都去打网关')
       assert.equal(others.routeKey, 'workbuddy2api-hub-others')
       assert.equal(others.apiKeyEnv, 'WORKBUDDY2API_HUB_API_KEY_OTHERS')
       assert.equal(pool.apiKeyEnv, 'WORKBUDDY2API_HUB_API_KEY_POOL_CN')
       // mock 里 pool-cn 只能看到 hy3 → 证明模型集是按 key 各自拉的
       assert.deepEqual(pool.models.map((row) => row.id), ['hy3'])
-      assert.ok(pool.pulledAt > 0, '新发现的 key 当轮要拉一次，否则设置页一片空白')
+      assert.ok(pool.pulledAt > 0, '每条 key 当轮都拉，设置页不会一片空白')
 
       // 用量按 key 拆：bendi 今日 92 次、pool-cn 只有 6 次
       assert.equal(bendi.usage.requests, 92)
@@ -522,6 +510,13 @@ describe('多 key：一 key 一条路由一条凭据', () => {
       // 主 key 余额 = 它绑的两个账号之和（1347.33 + 88.5），与全局余额不是一回事
       assert.equal(snapshot.mainKeyBalance.remain, 1435.83)
       assert.equal(snapshot.mainKeyBalance.bound, 2)
+      // 每条 key 也带自己的余额合计：徽标要显示「当前会话那条 key 的余额」，
+      // 光有主 key 那一份不够——切到别的 key 的会话时得跟着换。
+      assert.equal(bendi.balance.remain, 1435.83, '徽标第一行的分子：按这条 key 绑的账号求和')
+      assert.equal(bendi.balance.bound, 2)
+      // pool-cn 绑的账号在 mock 的 /accounts 里没有，算不出来就给 null，不能瞎报 0
+      assert.equal(pool.balance.bound, 2)
+      assert.equal(pool.balance.remain, null)
 
       // 三条路由各写一条，模型数 3 + 3 + 1
       const providers = ctx.__entries.find((row) => row.ns === 'llm-pi-ai').value.providers
@@ -536,20 +531,19 @@ describe('多 key：一 key 一条路由一条凭据', () => {
     }
   })
 
-  test('POST /keys/pull-mode 改拉取方式，POST /keys/pull 立刻拉一次', async () => {
+  test('POST /keys/pull 立刻重拉一条 key；不再有 /keys/pull-mode', async () => {
     const ctx = await makeCtx()
     const runtime = new HubRuntime(ctx, { baseUrl: base })
     await runtime.start()
     try {
-      let result = await expectCall(runtime, {
+      const gone = await expectCall(runtime, {
         method: 'POST',
         url: '/workbuddy2api-hub/api/keys/pull-mode',
         body: { hubKeyId: 'others001', pull: 'auto' },
       })
-      assert.equal(result.status, 200)
-      assert.equal(result.body.keys.find((key) => key.hubKeyId === 'others001').pull, 'auto')
+      assert.equal(gone.status, 404, '拉取方式开关已经删掉')
 
-      result = await expectCall(runtime, {
+      const result = await expectCall(runtime, {
         method: 'POST',
         url: '/workbuddy2api-hub/api/keys/pull',
         body: { hubKeyId: 'poolcn001' },

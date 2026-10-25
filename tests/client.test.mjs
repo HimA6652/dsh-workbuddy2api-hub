@@ -26,6 +26,7 @@ const CLIENT_FILE = join(HERE, '..', 'client', 'client.js')
 function fakeReact() {
   return {
     createElement: (type, props, ...children) => ({ type, props: props ?? {}, children }),
+    Fragment: 'Fragment',
     useState: (initial) => [typeof initial === 'function' ? initial() : initial, () => {}],
     useEffect: () => {},
     useMemo: (factory) => factory(),
@@ -422,6 +423,7 @@ function multiSnapshot() {
         routeKey: 'workbuddy2api-hub',
         isMain: true,
         accounts: 2,
+        balance: { remain: 1435.83, bound: 2, found: 2, enabled: 2, missing: 0 },
         usage: bendiToday,
         usageWeek: bendiWeek,
       },
@@ -431,19 +433,26 @@ function multiSnapshot() {
         routeKey: 'workbuddy2api-hub-pool-cn',
         isMain: false,
         accounts: 2,
+        balance: { remain: 88.5, bound: 2, found: 2, enabled: 2, missing: 0 },
         usage: poolToday,
         usageWeek: poolWeek,
       },
     ],
     usageByKey: { bendi0001: bendiToday, poolcn001: poolToday },
     usageWeekByKey: { bendi0001: bendiWeek, poolcn001: poolWeek },
-    usage: bendiToday,
-    usageWeek: bendiWeek,
+    // 整域数故意和主 key 不同，用来证明弹窗的「总计」是按各 key 相加、不是整域口径
+    usage: { totalTokens: 80000000, credit: 70, costCny: 12 },
+    usageWeek: { totalTokens: 300000000, credit: 500, costCny: 35 },
     usageRange: 'today',
   }
 }
 
-describe('侧边栏徽标：五项数字', () => {
+// 一行「今日 / 本周」右半边是三个数字格，按顺序取文字。
+function numsOf(row) {
+  return row.children[1].children.map((node) => node.children.join(''))
+}
+
+describe('侧边栏徽标：三行数字', () => {
   test('footerSummary 把余额/今日 tokens/今日积分/API 等价算成可读文本', async () => {
     const { exports } = await loadClient()
     const summary = exports.__footerSummary({
@@ -452,10 +461,22 @@ describe('侧边栏徽标：五项数字', () => {
       usageRange: 'today',
     })
     assert.equal(summary.balance, '3693.42')
-    assert.equal(summary.tokens, '42.8M')
+    assert.equal(summary.tokens, '42.77M', 'tokens 也保留两位小数')
     assert.equal(summary.credit, '40.92')
     assert.equal(summary.cost, '¥6.25')
     assert.equal(summary.range, 'today')
+  })
+
+  test('数字一律两位小数：k/M/B 缩写也不去掉尾零', async () => {
+    const { exports } = await loadClient()
+    const num = (value) =>
+      exports.__footerSummary({ usage: { totalTokens: value, credit: 1, costCny: 1 } }).tokens
+    assert.equal(num(999), '999.00', '整数也补两位，全列统一')
+    assert.equal(num(1234), '1.23k')
+    assert.equal(num(1200), '1.20k', '尾零要留着，否则同一列参差不齐')
+    assert.equal(num(72300000), '72.30M')
+    assert.equal(num(260700000), '260.70M')
+    assert.equal(num(1234567890), '1.23B')
   })
 
   test('快照还没到 / 字段缺失时不抛错，显示占位符', async () => {
@@ -471,7 +492,7 @@ describe('侧边栏徽标：五项数字', () => {
     assert.equal(noUsage.tokens, '—')
   })
 
-  test('两个语言包都带了徽标的五个标签', async () => {
+  test('两个语言包都带了徽标与用量表的标签', async () => {
     const { exports } = await loadClient()
     for (const dict of [exports.__dicts.zh, exports.__dicts.en]) {
       for (const key of [
@@ -484,15 +505,23 @@ describe('侧边栏徽标：五项数字', () => {
         'rangeAll',
         'tokensUnit',
         'creditUnit',
+        'keyDetail',
+        'totalRow',
+        'colCost',
+        'keyAccounts',
       ]) {
         assert.equal(typeof dict[key], 'string', key)
         assert.notEqual(dict[key], '', key)
       }
       assert.equal(dict.usage24h, undefined, '旧的「近 24 小时」标签要清掉')
+      assert.equal(dict.dashboardPwd, undefined, '「打开面板时带上密码」整条功能已删')
     }
     assert.equal(exports.__dicts.zh.footerLabel, 'WorkBuddy')
     assert.equal(exports.__dicts.zh.rangeToday, '今日')
     assert.equal(exports.__dicts.zh.rangeAll, '累计')
+    assert.equal(exports.__dicts.zh.totalRow, '总计')
+    assert.equal(exports.__dicts.zh.colCost, '等价')
+    assert.equal(exports.__dicts.en.totalRow, 'Total')
 
     // 窗口名要如实反映：老宿主没有 usageRange 时是「全量」，不能标成今日
     assert.equal(exports.__footerSummary({ usage: { totalTokens: 1, credit: 0, costCny: 0 } }).range, 'all')
@@ -501,108 +530,287 @@ describe('侧边栏徽标：五项数字', () => {
     assert.equal(exports.__footerSummary({ usageRange: 'nope' }).range, 'all')
   })
 
-  test('展开态第二、三行：窗口名贴左，三个数字贴右', async () => {
+  test('展开态三行：key 名 + 该 key 余额/总余额、今日、本周，数字各自右对齐', async () => {
     const { exports } = await loadClient()
     const zh = exports.__dicts.zh
     const t = (key) => zh[key] ?? key
 
-    // 当前会话用的是主 key 的路由，所以第二、三行取主 key 的用量。
+    // 当前会话用的是主 key 的路由，所以取主 key 的余额与用量。
     exports.__setProviderState({ value: 'workbuddy2api-hub', routable: true })
     exports.__store.set(multiSnapshot())
 
     const tree = exports.__HubFooter({ t, wide: true })
-    assert.equal(tree.type, 'button')
-    const [row1, rowToday, rowWeek] = tree.children
+    assert.equal(tree.type, 'Fragment', '徽标与弹窗是兄弟节点，不是一个空壳')
+    const badge = tree.children[0]
+    assert.equal(badge.type, 'button')
+    assert.equal(badge.props.className, 'wbhub_badge')
+    assert.equal(badge.props.title, undefined, '不再用悬停提示')
+    assert.equal(badge.props['aria-haspopup'], 'dialog')
 
-    // 第一行：状态点 + WorkBuddy + 主 key 余额 + 全局（更淡的那个）
-    const head = row1.children.map((node) => (typeof node === 'string' ? node : node.children.join('')))
-    assert.deepEqual(head, ['', 'WorkBuddy', '1435.83', '/ 3731.61'], '主 key 余额在前，全局只是背景')
+    const [glyph, body] = badge.children
+    assert.equal(glyph.type, exports.__HubGlyph, '图标在左，和参考插件一致')
+    assert.equal(body.props.className, 'wbhub_badgeBody')
 
-    // 每个数据行 = [左标签, 右侧数字组]，数字组里是「值 · 值 · 值」
-    const flatten = (node) => (typeof node === 'string' ? node : node.children.map(flatten).flat(Infinity))
-    for (const [row, label, expected] of [
-      [rowToday, '今日', ['72.3M', '·', '61.41', '·', '¥10.39']],
-      [rowWeek, '本周', ['260.7M', '·', '465.43', '·', '¥31.17']],
-    ]) {
-      const [left, right] = row.children
-      assert.deepEqual(flatten(left), [label], '窗口名贴左')
-      assert.deepEqual(flatten(right), expected, '三个数字贴右')
-      assert.equal(row.props.style.alignItems, 'baseline')
-      assert.equal(right.props.style.marginLeft, 'auto', '右侧数字顶到最右，两行才对得齐')
-      assert.equal(left.props.style.minWidth, '44px', '左标签留固定宽度，中文两个字才不抖')
-    }
+    // 第一行：key 名 + 「该 key 余额 / 总余额」
+    const [nameNode, valueNode] = body.children[0].children
+    assert.equal(nameNode.children.join(''), 'bendi', '第一行写当前 key 的名字')
+    assert.equal(valueNode.children.join(''), '1435.83 / 3731.61')
+
+    // 第二、三行：窗口名在左，三个数字在右，两行同构
+    const rowOf = (index) => body.children[index]
+    assert.equal(rowOf(1).props.className, 'wbhub_usageRow')
+    assert.equal(rowOf(1).children[0].children.join(''), t('rangeToday'))
+    assert.deepEqual(numsOf(rowOf(1)), ['72.30M', '61.41', '¥10.39'])
+    assert.equal(rowOf(2).children[0].children.join(''), t('rangeWeek'))
+    assert.deepEqual(numsOf(rowOf(2)), ['260.70M', '465.43', '¥31.17'])
+
+    // 三列等宽 + 等宽字体，数字才能上下对齐
+    assert.match(exports.__css, /\.wbhub_usageNums\{[^}]*grid-template-columns:[^}]*justify-items:end/)
   })
 
-  test('切到别的 key 的会话：今日/本周改用那条 key 的数，不用主 key 的', async () => {
+  test('切到别的 key 的会话：余额与今日/本周都换成那条 key 的数', async () => {
     const { exports } = await loadClient()
-    const t = (key) => exports.__dicts.zh[key] ?? key
+    const zh = exports.__dicts.zh
+    const t = (key) => zh[key] ?? key
+
     exports.__setProviderState({ value: 'workbuddy2api-hub-pool-cn', routable: true })
     exports.__store.set(multiSnapshot())
-    const flatten = (node) => (typeof node === 'string' ? node : node.children.map(flatten).flat(Infinity))
+
     const tree = exports.__HubFooter({ t, wide: true })
-    assert.deepEqual(flatten(tree.children[1].children[1]), ['213', '·', '0.00', '·', '¥0.00'])
-    assert.deepEqual(flatten(tree.children[2].children[1]), ['639', '·', '0.00', '·', '¥0.00'])
-    // 第一行的余额不跟着会话走：余额是按「主 key 绑定的账号」算的，与当前会话无关。
-    const head = tree.children[0].children.map((node) => (typeof node === 'string' ? node : node.children.join('')))
-    assert.equal(head[2], '1435.83')
+    const body = tree.children[0].children[1]
+    const [nameNode, valueNode] = body.children[0].children
+    assert.equal(nameNode.children.join(''), 'pool-cn', '名字跟着会话走')
+    assert.equal(valueNode.children.join(''), '88.50 / 3731.61', '余额也按这条 key 算，不是主 key 的 1435.83')
+    assert.deepEqual(numsOf(body.children[1]), ['213.00', '0.00', '¥0.00'])
+    assert.deepEqual(numsOf(body.children[2]), ['639.00', '0.00', '¥0.00'])
+
+    // 会话用的不是网关模型（provider 为空）：回落主 key
+    exports.__setProviderState({ value: 'some-other-provider', routable: true })
+    const fallback = exports.__HubFooter({ t, wide: true })
+    const fallbackBody = fallback.children[0].children[1]
+    assert.equal(fallbackBody.children[0].children[0].children.join(''), 'bendi')
+    assert.equal(fallbackBody.children[0].children[1].children.join(''), '1435.83 / 3731.61')
   })
 
-  test('悬停框里今日与本周格式统一、并列出全部 key', async () => {
+  test('点击出副窗：贴着徽标上沿，不再用悬停 title；各 key 用量表照图排', async () => {
     const { exports } = await loadClient()
     const zh = exports.__dicts.zh
     const t = (key) => zh[key] ?? key
+
     exports.__setProviderState({ value: 'workbuddy2api-hub', routable: true })
     exports.__store.set(multiSnapshot())
-    const lines = exports.__HubFooter({ t, wide: true }).props.title.split('\n')
-    assert.deepEqual(lines, [
-      `${t('footerLabel')} · ${t('mainKeyBalance')} 1435.83（2 号）`,
-      `${t('footerBalance')} 3731.61（190 号）`,
-      `今日 · bendi ${t('tokensUnit')} 72.3M · ${t('creditUnit')} 61.41 · ${t('footerApiCost')} ¥10.39`,
-      `本周 ${t('tokensUnit')} 260.7M · ${t('creditUnit')} 465.43 · ${t('footerApiCost')} ¥31.17`,
-      t('footerAllKeys'),
-      `● bendi · ${t('creditUnit')} 61.41 / 72.3M`,
-      `○ pool-cn · ${t('creditUnit')} 0.00 / 213`,
-      'http://127.0.0.1:8788',
-    ])
-    // 同构：把窗口名与 key 名换成占位、把数字换成占位，两行必须一字不差
-    const stripKey = (line) => line.replace(/ · \S+ tokens/, ' tokens')
-    const shape = (line) => line.replace(/^(今日|本周)/, '<窗口>').replace(/[0-9][0-9.]*[KMB]?/g, '<数>')
-    assert.equal(shape(stripKey(lines[2])), shape(lines[3]))
-    assert.equal(shape(lines[3]), '<窗口> tokens <数> · 积分 <数> · API 等价 ¥<数>')
+
+    const tree = exports.__HubFooter({ t, wide: true })
+    const overlay = tree.children[1]
+    assert.equal(overlay.type, exports.__HubOverlay, '弹窗外壳可单独测')
+    assert.equal(overlay.children[0].props.className, 'wbhub_detail')
+
+    // 外壳本身：点遮罩关闭；从没打开过就不渲染任何东西
+    assert.equal(exports.__HubOverlay({ open: false }), null)
+    const pop = exports.__HubOverlay({ open: true, anchor: { left: 12, bottom: 96 }, title: 'x', closeLabel: '关闭' })
+    assert.equal(pop.props.className, 'wbhub_popMask')
+    const card = pop.children[0]
+    assert.equal(card.props.className, 'wbhub_pop')
+    assert.equal(card.props.style.left, '12px', '副窗贴着徽标左沿')
+    assert.equal(card.props.style.bottom, '96px', '往上弹，不是居中')
+    assert.equal(card.children[0].props.className, 'wbhub_popHead')
+    assert.equal(card.children[0].children[1].props.className, 'wbhub_popClose')
+
+    const detail = tree.children[1].children[0]
+    // 1) 当前会话 + 2) 两个余额格子（不再有今日/本周两行）
+    assert.equal(detail.children[0].props.className, 'wbhub_detailHead')
+    const metrics = detail.children[1]
+    assert.equal(metrics.props.className, 'wbhub_metrics')
+    assert.equal(metrics.children.length, 2)
+    assert.equal(metrics.children[0].children[0].children.join(''), 'bendi 积分余额')
+
+    // 3) 各 key 用量：列标题 + 每条 key 一段 + 总计
+    const block = detail.children[2]
+    assert.equal(block.children[0].children.join(''), t('keyDetail'))
+    const table = block.children[1]
+    assert.equal(table.props.className, 'wbhub_usageTable')
+
+    const head = table.children[0]
+    assert.equal(head.props.className, 'wbhub_usageHead')
+    assert.deepEqual(numsOf(head), [t('tokensUnit'), t('creditUnit'), t('colCost')])
+
+    const first = table.children[1]
+    assert.equal(first.props.className, 'wbhub_usageItem')
+    const title = first.children[0]
+    assert.equal(title.props.className, 'wbhub_usageTitle')
+    assert.equal(title.children[1].children.join(''), 'bendi')
+    assert.equal(title.children[2].children.join(''), '账号 2')
+    assert.equal(first.children[1].children[0].children.join(''), t('rangeToday'))
+    assert.deepEqual(numsOf(first.children[1]), ['72.30M', '61.41', '¥10.39'])
+    assert.deepEqual(numsOf(first.children[2]), ['260.70M', '465.43', '¥31.17'])
+
+    const second = table.children[2]
+    assert.equal(second.children[0].children[1].children.join(''), 'pool-cn')
+
+    const total = table.children[3]
+    assert.equal(total.props.className, 'wbhub_usageTotal')
+    assert.equal(total.children[0].children[0].children.join(''), t('totalRow'))
+    // 总计直接用 /usage 的整域汇总（夹具里是 80.00M / 70.00），不是上面两条 key 相加的 72.30M
+    assert.deepEqual(numsOf(total.children[1]), ['80.00M', '70.00', '¥12.00'], '总计读网关整域数')
+    assert.deepEqual(numsOf(total.children[2]), ['300.00M', '500.00', '¥35.00'])
+
+    // 4) 底部两个按钮：打开面板 / 关闭
+    const actions = detail.children[6]
+    assert.equal(actions.props.className, 'wbhub_footActions')
+    assert.equal(actions.children.length, 2)
   })
 
-  test('主 key 被删：第一行明说已删除，并提示重新选模型', async () => {
+  test('主 key 被删：徽标直接写已删除，弹窗提示重选模型', async () => {
     const { exports } = await loadClient()
     const zh = exports.__dicts.zh
     const t = (key) => zh[key] ?? key
+
     const snapshot = multiSnapshot()
     snapshot.mainKeyMissing = true
-    snapshot.mainKeyBalance = { remain: null, bound: 2, found: 0, enabled: 0, missing: 2 }
     snapshot.keys[0].missing = true
     exports.__setProviderState({ value: 'workbuddy2api-hub', routable: false })
     exports.__store.set(snapshot)
+
     const tree = exports.__HubFooter({ t, wide: true })
-    const head = tree.children[0].children.map((node) => (typeof node === 'string' ? node : node.children.join('')))
-    assert.equal(head[2], zh.footerMainDeleted, '不能拿 0 或 — 冒充余额')
-    const lines = tree.props.title.split('\n')
-    assert.ok(lines.includes(zh.reselectHint), '会话里的模型已经不在目录里，要提示重选')
-    // 收起态也得看得出「坏了」，不然 ~48px 里只剩一个 0
-    const narrow = exports.__HubFooter({ t, wide: false })
-    assert.equal([].concat(narrow.children[1].children).join(''), '!')
+    const body = tree.children[0].children[1]
+    assert.equal(body.children[0].children[1].children.join(''), `${t('footerMainDeleted')} / 3731.61`)
+
+    const detail = tree.children[1].children[0]
+    const notes = detail.children.filter((node) => node !== null && node.props.className === 'wbhub_detailNote')
+    assert.ok(
+      notes.some((node) => node.children.join('').includes(t('reselectHint'))),
+      '模型已经不可用，要提示重选',
+    )
   })
 
-  test('没有 usageWeek 的老宿主不画第三行，也不拿今日数冒充本周', async () => {
+  test('没有 usageWeek 的老宿主不画本周行，也不拿今日数冒充本周', async () => {
     const { exports } = await loadClient()
-    const t = (key) => exports.__dicts.zh[key] ?? key
-    exports.__store.set({
-      balance: { balance: 1 },
-      usage: { totalTokens: 1000, credit: 1, costCny: 0.5 },
-      usageRange: 'today',
-    })
+    const zh = exports.__dicts.zh
+    const t = (key) => zh[key] ?? key
+
+    const snapshot = multiSnapshot()
+    delete snapshot.usageWeek
+    delete snapshot.usageWeekByKey
+    for (const key of snapshot.keys) delete key.usageWeek
+    exports.__setProviderState({ value: 'workbuddy2api-hub', routable: true })
+    exports.__store.set(snapshot)
+
     const tree = exports.__HubFooter({ t, wide: true })
-    // React 把 null 子节点渲染成空，这里也照这个口径数行数。
-    assert.equal(tree.children.filter((node) => node !== null && node !== undefined).length, 2, '只有标题行 + 今日行')
-    assert.equal(tree.children.at(-1), null, '第三行位置是 null，不是拿今日数据顶替')
-    assert.equal(exports.__footerSummary({ usageWeek: { totalTokens: 1, credit: 2, costCny: 3 } }, 'week').range, 'week')
+    const body = tree.children[0].children[1]
+    assert.equal(body.children.length, 3)
+    assert.equal(body.children[2], null, '本周那一行整个不画')
+
+    const table = tree.children[1].children[0].children[2].children[1]
+    assert.equal(table.children[1].children[2], null, '各 key 用量里也不画本周')
+    assert.equal(table.children[3].children[2], null, '总计也不画本周')
   })
+
+  test('收起态只留 36×36 圆形图标，没有文字', async () => {
+    const { exports } = await loadClient()
+    const zh = exports.__dicts.zh
+    const t = (key) => zh[key] ?? key
+
+    exports.__setProviderState({ value: 'workbuddy2api-hub', routable: true })
+    exports.__store.set(multiSnapshot())
+
+    const tree = exports.__HubFooter({ t, wide: false })
+    const badge = tree.children[0]
+    assert.equal(badge.props.className, 'wbhub_badge wbhub_badgeRail')
+    assert.equal(badge.children.length, 2)
+    assert.equal(badge.children[1], null, 'rail 里没有文字，只有图标')
+    assert.match(exports.__css, /\.wbhub_badgeRail\{[^}]*width:36px;height:36px/)
+  })
+
+  test('样式：徽标贴底换行、三列数字等宽、副窗不是居中模态', async () => {
+    const { exports } = await loadClient()
+    assert.match(exports.__css, /\.wbhub_badge\{[^}]*flex:1 0 100%/, 'footer 里独占一行')
+    assert.match(exports.__css, /\[class\*=footerActions\]\{flex-wrap:wrap\}/)
+    assert.match(exports.__css, /\.wbhub_num\{text-align:right/)
+    assert.match(exports.__css, /\.wbhub_pop\{position:fixed/)
+    assert.equal(exports.__css.includes('.wbhub_modal'), false, '旧的居中模态样式已删')
+    assert.equal(exports.__css.includes('.wbhub_overlay'), false, '旧的遮罩样式已删')
+    assert.equal(exports.__injectStyles(), false, '没有 document 时静默跳过')
+  })
+  test('每条 key 的模型表：主 key 默认摊开，其余收起，点过就照记录走', async () => {
+    const { exports } = await loadClient()
+    const open = exports.__keyFoldOpen
+    assert.equal(open({}, { hubKeyId: 'k1', isMain: true }), true, '主 key 没点过就是摊开的')
+    assert.equal(open({}, { hubKeyId: 'k2', isMain: false }), false, '其它 key 没点过是收起的')
+    assert.equal(open(undefined, { hubKeyId: 'k3', isMain: true }), true, '状态还没建立时按默认算')
+    assert.equal(open({ k1: false }, { hubKeyId: 'k1', isMain: true }), false, '主 key 也能手动收起')
+    assert.equal(open({ k2: true }, { hubKeyId: 'k2', isMain: false }), true, '非主 key 也能手动摊开')
+    assert.equal(open({}, {}), false, '缺字段时当收起处理，不炸')
+    assert.match(exports.__css, /\.wbhub_keyFold\{/, '折叠按钮的样式要在')
+    assert.match(exports.__css, /\.wbhub_keyFoldArrow\{/, '折叠箭头也要有样式')
+  })
+
+  test('已同步模型数取所有 key 的并集去重，不是各条路由条数相加', async () => {
+    const { exports } = await loadClient()
+    const model = (id, extra = {}) => ({ id, enabled: true, retired: false, ...extra })
+
+    // 用户给的例子：A 启 1/2/3、B 启 2/3/4、C 启 1/5 → 合成 1/2/3/4/5，共 5 个。
+    // 各条路由加起来是 3 + 4 + 2 = 9，那是「按 key 重复计数」，不是能选到的模型数。
+    const snapshot = {
+      lastSyncCount: 9,
+      counts: { total: 19 },
+      keys: [
+        { hubKeyId: 'A', isMain: true, lastSyncCount: 3, models: [model('1'), model('2'), model('3')] },
+        { hubKeyId: 'B', isMain: false, lastSyncCount: 4, models: [model('2'), model('3'), model('4')] },
+        { hubKeyId: 'C', isMain: false, lastSyncCount: 2, models: [model('1'), model('5')] },
+      ],
+    }
+    assert.equal(exports.__syncedModelCount(snapshot), 5, '1/2/3/4/5 去重后是 5 个')
+
+    // 没勾的、下架的都不算；两条 key 勾了同一个模型只算一次。
+    const mixed = {
+      lastSyncCount: 99,
+      keys: [
+        { models: [model('glm-5.3'), model('hy3', { enabled: false })] },
+        { models: [model('glm-5.3'), model('kimi-k3', { retired: true }), model('step-5-preview')] },
+      ],
+    }
+    assert.equal(exports.__syncedModelCount(mixed), 2, 'glm-5.3 只算一次，hy3 没勾、kimi-k3 下架都不算')
+
+    // 一条都没勾（或老宿主没给 models）时退回宿主记的条数，别显示 0 骗人。
+    assert.equal(exports.__syncedModelCount({ lastSyncCount: 13, keys: [] }), 13, '没有 keys 时回落到合计')
+    assert.equal(exports.__syncedModelCount({ keys: [{ models: [] }], lastSyncCount: 4 }), 4)
+    assert.equal(exports.__syncedModelCount(null), 0)
+  })
+
+  test('版本与 API Key 来源：中文口径跟网关一致（cn=国内版 / intl=国际版）', async () => {
+    const { exports } = await loadClient()
+    const zh = exports.__dicts.zh
+    const en = exports.__dicts.en
+    const t = (key) => zh[key] ?? key
+
+    assert.equal(exports.__realmText({ health: { realm: 'cn' } }, t), '国内版')
+    assert.equal(exports.__realmText({ health: { realm: 'intl' } }, t), '国际版')
+    assert.equal(exports.__realmText({ health: { realm: 'beta' } }, t), 'beta', '没见过的版本原样显示')
+    assert.equal(exports.__realmText({ health: {} }, t), '—')
+    assert.equal(exports.__realmText(null, t), '—')
+
+    assert.equal(exports.__apiKeySourceText('config', t), '手动填写')
+    assert.equal(exports.__apiKeySourceText('credentials', t), '凭据库')
+    assert.equal(exports.__apiKeySourceText('cached', t), '凭据库')
+    assert.equal(exports.__apiKeySourceText('panel', t), '面板自动获取')
+    assert.equal(exports.__apiKeySourceText('', t), '未配置')
+
+    const keys = [
+      'realmLabel',
+      'realmCn',
+      'realmIntl',
+      'apiKeySourceLabel',
+      'apiKeyFromConfig',
+      'apiKeyFromCredentials',
+      'apiKeyFromPanel',
+      'apiKeyMissing',
+    ]
+    for (const key of keys) {
+      assert.equal(typeof zh[key], 'string', `zh 缺 ${key}`)
+      assert.equal(typeof en[key], 'string', `en 缺 ${key}`)
+    }
+    assert.equal(en.realmCn, 'China')
+    assert.equal(en.realmIntl, 'Global')
+  })
+
 })

@@ -13,13 +13,15 @@ DSH 设置页 / 侧边栏  ←  /workbuddy2api-hub/api/*  ──┘        └�
 
 ## 功能
 
-- **连接面板**：服务地址、面板密码、默认页签、轮询间隔；「测试连接」「立即同步」「打开看板」「清空同步」。
-- **多 key**：网关里有几条 API Key 就同步几条 provider（一 key 一条路由、一条凭据）。主 key 固定 `workbuddy2api-hub`，其余 `workbuddy2api-hub-<名字>`；主 key 之外默认「手动拉取」，只有点了「立即拉取」才去问网关。
+- **连接面板**：服务地址、面板密码、默认页签、API Key、轮询间隔；「保存并刷新」「测试连接」「打开面板」「刷新」「移除 DSH 路由」。面板密码只用来换面板会话令牌，不会拼进深链（`?tab=` 是唯一参数），也不会写进对话请求。
+- **设置页**：上面是连接区，中间是概览（额度 / 已启用 / 平均倍率 / 账号 / 面板会话 / 版本 / API Key 来源七格，下面是今日用量与「已同步 … · 6/19 模型」），再下面是每条 key 一张卡。同步行分母是网关给的模型总数，分子是**所有 key 启用模型的并集去重**（同一条模型被几条 key 都勾上只算一次）。
+- **多 key**：网关里有几条 API Key 就同步几条 provider（一 key 一条路由、一条凭据）。主 key 固定 `workbuddy2api-hub`，其余 `workbuddy2api-hub-<名字>`；每条 key 每轮都拉模型清单（实测与绑定账号数无关），设置页里各自一份模型开关，模型多的那几条默认收起，点卡片头上那行「账号 N · 模型 6/19」展开。
 - **模型同步**：把 `/v1/models` 写进 `llm-pi-ai` 的 `providers.workbuddy2api-hub`，每个模型带上 `contextWindow` / `maxTokens` / 图片输入 / 思考档位；按模型名称排序（不区分大小写、数字按数值），设置页表格与写进 DSH 的顺序一致。模型名后面直接带网关的倍率（`GLM-5.1 ×0.79`），免费模型标 `Free`——倍率写不进名字，选择器里就看不见。
-- **多 key 的排布**：一个 key ↔ 一条 provider 路由 ↔ 一条凭据引用。路由键建好就不再变（主 key 恒 `workbuddy2api-hub`，其余 `workbuddy2api-hub-<名字>`），所以网关里改 key 的名字、换倍率，都不会让会话里已经选中的模型消失。网关里删掉某条 key → 那条路由自动撤掉；删掉的是主 key → 徽标显示「主 key 已删除」、会话提示重新选模型，**不会拿别的 key 偷偷顶替**。余额没法按 key 拆（网关的 `/v1/balance-summary` 是整域汇总），所以第一行给的是「主 key 绑定的账号余额之和」+「整域余额」，两个数都带账号数。
+- **多 key 的排布**：一个 key ↔ 一条 provider 路由 ↔ 一条凭据引用。路由键建好就不再变（主 key 恒 `workbuddy2api-hub`，其余 `workbuddy2api-hub-<名字>`），所以网关里改 key 的名字、换倍率，都不会让会话里已经选中的模型消失。网关里删掉某条 key → 那条路由自动撤掉；删掉的是主 key → 徽标显示「主 key 已删除」、会话提示重新选模型，**不会拿别的 key 偷偷顶替**。余额拆不到 key 的只有 `/v1/balance-summary`（整域汇总），所以每条 key 的余额由后端拿 `/accounts` 里**这条 key 绑定的账号** `credits.remain` 求和得出（纯内存，不额外发请求）；账号没出现在 `/accounts` 里时该 key 的余额是 `null`，不报 0。徽标第一行给的就是「当前会话那条 key 的余额 / 整域余额」。
 - **增量与容错**：模型下架先进宽限期（默认 24 小时，可一键立即移除），回来能复活；内容没变就不写配置，避免每次轮询都触发一次配置更新；配置冲突自动重取 revision 重试。
 - **余额与用量**：`/v1/balance-summary` 的 credit 余额，`/usage?range=today` 的请求数 / 失败数 / tokens / credit / API 等价花费 / 缓存命中。
-- **侧边栏徽标**：展开态三行——第一行是「主 key 余额 + 全局余额」，第二三行是今日 / 本周的 `tokens · 积分 · API 等价花费`；窗口名贴左、三个数字贴右。**第二三行跟着当前会话用的那条 key 走**：会话选的是 `pool-cn` 的模型，显示的就是 pool-cn 的用量，切会话自动切，且不为此多发一个请求；会话用的不是网关模型时回落到主 key。悬停能看全部 key 一行一条（`●` 标当前）、完整数字和连接地址，点一下直接打开 hub 看板。
+- **侧边栏徽标**：展开态三行——第一行「当前会话那条 key 的名字 + 该 key 余额 / 整域余额」，第二行 `今日`、第三行 `本周`，右半边是 `tokens / 积分 / 等价` 三列、等宽右对齐；收起态是一个 `36×36` 圆形图标。**数字跟着当前会话用的那条 key 走**：会话选的是 `pool-cn` 的模型，第一行的名字、余额和第二、三行的用量就都换成 pool-cn 的，切会话自动切，且不为此多发一个请求（余额是后端拿 `/accounts` 在本地按 key 绑定的账号求和）；会话用的不是网关模型时回落到主 key。**点一下出副窗**：贴着徽标上沿弹出，内容是「各 key 用量」表（列标题 `tokens / 积分 / 等价`，每条 key 一段「名字 + 账号 N」再跟今日、本周两行，末尾 `总计`），上面两个格子是「这条 key 的余额」与「全部账号」，底部「打开面板」「关闭」，点遮罩或右上角 `×` 关闭——不再有悬停提示，也不会一点就跳窗口。所有数字两位小数（`72.30M`、`¥10.39`、`1435.83`）；数字全是网关原样给的——每条 key 的用量来自
+  `/usage/analytics` 的按 API Key 分组（面板「用量明细 → 按 API Key」那张表），`总计` 来自 `/usage` 的整域汇总。
 - **告警**：连不上、密码错、登录被限流、缺 API Key、额度低于阈值、账号需要重登——都能「知道了」消掉 24 小时。
 - **不崩**：hub 没开、密码错、超时、返回 HTML、返回半截 JSON，插件都只把它变成一段中文提示；`/state` 永远返回 200，前端永远有东西可渲染。
 
@@ -113,7 +115,6 @@ dsh plugin --profile desktop add github:HimA6652/dsh-workbuddy2api-hub
 | `routeKey` | `workbuddy2api-hub` | 写进 `providers.<routeKey>`。**故意不叫 `wb`**，免得覆盖你已有的路由 |
 | `maxKeys` | `10` | 最多同步几条网关 key（1–50）。超出的只读不写，避免一次刷出几十个 provider |
 | `intervalSeconds` | `120` | 轮询间隔，下限 30、上限 3600；连续失败会指数退避到 30 分钟 |
-| `dashboardIncludePwd` | `false` | 「打开看板」时是否把密码拼进链接。默认不拼——`?pwd=` 会进地址栏、浏览器历史，还会被 hub 写进自己的访问日志；关着就在面板里手输一次 |
 | `sync` | `true` | 关掉就只看数据、不写模型 |
 | `autoApiKey` | `true` | 缺 Key 时是否允许从面板 `/settings/reveal` 自动取 |
 | `newModelPolicy` | `select` | hub 上新出的模型默认勾选（`select`）还是先不写（`ignore`） |
@@ -150,10 +151,10 @@ dsh plugin --profile desktop add github:HimA6652/dsh-workbuddy2api-hub
 | GET | `/state` | 全量快照（带 `ETag`，前端用 `If-None-Match` 拿 304） |
 | GET | `/usage?range=today` | 只刷用量（`range` 取 `today` / `week` / `month` / `all`） |
 | GET | `/accounts` | 只刷账号 |
-| GET | `/dashboard-url` | 看板深链（默认只带 `tab`，`dashboardIncludePwd` 打开才带 `pwd`），**只给本机** |
+| GET | `/dashboard-url` | 看板深链（只带 `tab`，密码永远不进 URL），**只给本机** |
 | POST | `/config` | 改地址 / 密码 / 页签 / 间隔 / API Key |
 | POST | `/selection` `/bulk` `/enable-new` | 勾选模型、全选/全不选、新模型默认策略（带 `hubKeyId` 就只作用于那条 key） |
-| POST | `/keys/pull` `/keys/pull-mode` | 立刻拉一次某条 key 的模型 / 改它的拉取方式（`auto` / `manual`） |
+| POST | `/keys/pull` | 立刻重拉某条 key 的模型（排障用，60 秒节流） |
 | POST | `/keys/selection` `/keys/sync-selection` | 单独改某条 key 的勾选 / 把一条 key 的勾选同步到别的 key |
 | POST | `/keys/main` | 指定哪条 key 是主 key（只换身份，不改它已有的路由键） |
 | POST | `/refresh` `/test` `/policy` `/dismiss` `/retire` `/clear` | 同步、探测、策略、消警、立即移除、清空同步 |
@@ -164,7 +165,7 @@ dsh plugin --profile desktop add github:HimA6652/dsh-workbuddy2api-hub
 
 - **API Key** 只进 DSH 凭据库和内存，**绝不**写状态文件，也**绝不**出现在 `/state` 里（连掩码都不给）。
 - **面板密码**会存进 profile 的状态文件 `workbuddy2api-hub.json`（明文，重启后要靠它继续登录）。它只是 hub 的面板密码，不等于 API Key；如果你的 hub 用了别的重要密码，建议给面板单独设一个。
-- `/dashboard-url` 只对本机开放；而且默认**不把密码拼进链接**（`dashboardIncludePwd: false`）。原因很具体：hub 会把收到的请求行原样写进自己的 `logs/service.log`，`GET /?pwd=…` 因此会在磁盘上留一份明文。关掉之后进面板手输一次即可，token 存在标签页里，同一标签页内不会再问。
+- `/dashboard-url` 只对本机开放，而且链接里**永远不拼密码**（只有 `?tab=`）。原因很具体：hub 会把收到的请求行原样写进自己的 `logs/service.log`，`GET /?pwd=…` 因此会在磁盘上留一份明文。进面板手输一次即可，token 存在标签页里，同一标签页内不会再问。
 - 插件对 hub 只做 GET 和 `/panel/login`，不碰任何写入接口。
 
 ## 排错

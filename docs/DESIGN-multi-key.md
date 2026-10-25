@@ -126,7 +126,6 @@
   "baseUrl": "http://127.0.0.1:8788",
   "pwd": "…",
   "tab": "gateway",
-  "dashboardIncludePwd": false,
   "intervalSeconds": 120,
   "maxKeys": 10,
   "mainKeyId": "ae84c129b249",      // 主 key 的 hubKeyId
@@ -166,7 +165,7 @@
 5. **不提供删除按钮**：网关里删掉/停用（`enabled:false`）→ 下一轮自动从 `providers` 里摘掉该路由，`state.keys[]` 里标 `missing` 并保留条目（凭据保留，便于恢复）。「被删」与「从未存在」用 `/settings.deleted_api_keys[]`（实测存在该字段，当前为空）区分：命中它才叫删除，否则算新发现。
 6. 超过 `maxKeys`（默认 10）→ 多余的标 `skipped`，不建路由，UI 提示。
 
-### 3.4 拉取策略
+### 3.4 拉取策略（1.2.0 已删除，见 §8.1）
 
 | key | 默认 | 行为 |
 | --- | --- | --- |
@@ -204,7 +203,7 @@ perKeyModels = GET /v1/models (Bearer = 该 key)
   5. 设置页红条：`主 key（bendi）已从网关删除；当前会话需要重新选择模型`，并提供「重新指定主 key」下拉（列出网关现有 key）。
   6. 会话侧：模型选择器进入「重新选择模型」状态——由 DSH 的 `routable:false` 自然触发，插件只负责删路由，不伪造替代项。
 
-### 3.7 侧边栏徽标（三行）
+### 3.7 侧边栏徽标（三行）（1.2.0 改成三行 + 点击副窗、数字按 key 拆，见 §8.2）
 
 ```
 ● WorkBuddy   主key余额 3768.05 ｜ 全局 588,777.91（190 号）   ← 第一行（两个数据）
@@ -298,12 +297,132 @@ perKeyModels = GET /v1/models (Bearer = 该 key)
 | # | 问题 | 结论 | 依据 |
 | --- | --- | --- | --- |
 | 1 | 换模型是否要顺带改历史会话 | **不改** | 0.1（不影响上下文） |
-| 2 | `pool-cn` 是否自动拉 | **发现时拉一次，之后归 `manual` 不再轮询** | 3.4 + 0.4（5–21 ms，与账号数无关） |
+| 2 | `pool-cn` 是否自动拉 | **~~发现时拉一次，之后归 `manual` 不再轮询~~（8.1 已推翻：现在一律每轮都拉）** | 3.4 + 0.4（5–21 ms，与账号数无关） |
 | 3 | 徽标第一行口径 | **主 key 绑号余额之和 + 全局值** | 0.5 |
-| 4 | 非主 key 默认拉取方式 | **`manual`** | 3.4 |
+| 4 | 非主 key 默认拉取方式 | **~~`manual`~~（8.1 已推翻：没有 auto/manual 之分）** | 3.4 |
 | 5 | 是否写 `allowedModels` | **默认不写**，设置页给显式按钮 | 0.6 |
 | 6 | 同名消歧 | **追加 id 前 4 位** | 3.1 |
 | 7 | `maxKeys` 默认 10 是否够 | **够** | 网关侧无 key 数量上限（`wb_*.py` 无 `max_keys` 类逻辑，`/settings.limits` 只有积分/日限额），现有 3 个；10 只是插件侧自我保护，且本身是状态里的可配置项 |
 | 8 | 主 key 未绑任何账号时第一行显示什么 | **`主key余额 —`，全局照常，tooltip 标「主 key 未绑定账号」** | 0.5 末条 |
 | 9 | 子代理白名单是否默认勾选 | **默认不勾** | 0.6（默认不写 `allowedModels`） |
 | 10 | 第一行「全局」是否带号数 | **带**：`全局 588,777.91（190 号）` | 0.5（两数量级差异需要解释，否则像 bug） |
+
+## 8. 1.2.0 的调整（推翻 3.4、3.7 与部分 3.6）
+
+### 8.1 拉取策略：不再分 `auto` / `manual`
+
+3.4 那一套「主 key 自动、其余手动、60 秒缓存」在 1.2.0 删除。依据是本文件 0.4 已经量到的结论
+——每 key 一次 `/v1/models`，**耗时与绑定账号数无关**（1 号 `7.8 ms` / 2 号 `14.8 ms` /
+188 号 `15.4 ms`，抖动 3–32 ms），账号数只撑大全量接口的响应体（`/accounts` 4.4 MB、
+`/usage/analytics` 5.5 MB，每轮各拉一次，与 key 数无关）。
+
+所以 1.2.0 起**每条 key 每轮都拉**：`refresh()` 的 key 循环无条件调用 `refreshKeyModels()`，
+`POST /keys/pull-mode`、`snapshot().keys[].pull`、`PULL_MODES` / `normalizePullMode()` /
+`DEFAULT_KEY_PULL` 一并删除。`POST /keys/pull` 保留为排障用的手动重拉（60 秒节流）。
+老状态文件里残留的 `pull` 字段读进来直接忽略，不需要迁移。
+
+### 8.2 徽标：`title` 悬停 → 点击副窗，两行又回到三行
+
+3.7 的「三行 + `title` 悬停提示」整个换掉，改成对齐 `dsh-token-usage-stats` 的写法：
+
+- 一条 root 按钮（`font:inherit` + `--dsw-alias-label-secondary`），高 36px；收起态
+  36×36 圆形只留图标；图标是内联 SVG，`fill: currentColor`。
+- **不再用 `title`**：点击弹出贴着徽标上沿的**副窗**（`position: fixed`，位置由
+  `event.currentTarget.getBoundingClientRect()` 现算，`bottom` 取视口高减按钮上沿），
+  点遮罩或右上角 `×` 关闭。没有用宿主 `Modal`——它是居中模态，压住整个侧边栏，
+  而这里要的是「从底栏长出来」的轻量副窗。
+- 展开态最终仍是**三行**（1.2.0 中途曾收到两行，用户要求改回来）：
+  第一行「当前会话那条 key 的名字 + **该 key 余额 / 整域余额**」，第二行 `今日`、
+  第三行 `本周`，右半边是 `tokens / 积分 / 等价` 三列。三列用
+  `grid-template-columns: minmax(44px,1fr) minmax(42px,1fr) minmax(50px,1fr)` +
+  `justify-items: end`，同一指标在所有位置占同一列，切 key 时数字不左右跳。
+- **余额必须按 key 拆**：`snapshot.keys[]` 新增 `balance`（`keyProjections()` 里
+  `mainKeyBalance(this.accountsRaw, key.accounts)`）。`/v1/balance-summary` 是整域汇总、
+  拆不到 key，只能拿已经拉到的 `/accounts` 里这条 key 绑定账号的 `credits.remain` 求和
+  ——纯内存，不额外发请求；账号不在 `/accounts` 里时返回 `remain: null`（前端显示占位），
+  不能报 0。会话用的不是网关模型时回落主 key。
+- 副窗内容是「各 key 用量」表（用户给的样式）：一行列标题 `tokens / 积分 / 等价`，
+  每条 key 一段「名字 + `账号 N`」再跟 `今日`、`本周` 两行，末尾一行 `总计`
+  **直接取 `/usage` 的整域汇总**（面板「数据看板」顶部那行就是它），不自己求和——
+  2026-10-25 实测三条 key 的 `window` 相加与整域 tokens / credit / ¥ 差都是 0，两种口径等价，
+  网关给什么就显示什么；
+  上方两个格子放「这条 key 的余额」与「全部账号」，底部「打开面板」「关闭」。
+  原来塞在弹窗里的今日/本周两块删掉（徽标上已经有了），不做重复展示。
+- 数字统一两位小数（`72.30M` / `1.20k` / `¥10.39` / `1435.83`），k/M/B 缩写保留尾零。
+- **数据全是网关原样给的**，本地只做两件事：换两位小数、算 `errors / requests` 的成功率。
+  每条 key 的那四个数来自 `/usage/analytics` 里 gateway 按 API Key 分好的 `window`
+  （= 面板「数据看板 → 用量明细 → 按 API Key」那张表），「总计」来自 `/usage`。
+- 徽标第一行那串「该 key 余额 / 总余额」与下面两行数字同一套字体：11px、`label-tertiary`、
+  等宽 + `tabular-nums`，只把字重降回常规（标题行本是 600）。
+- 样式一次性注入 `<style data-plugin-css="dsh-workbuddy2api-hub/client.js">`，幂等。
+
+### 8.3 设置页：模型表并进各自的 key
+
+3.5 / 3.8 的「一张全局模型表 + 每条 key 的勾选同步」改成**每条 key 一份模型表**：
+勾选、思考档位、全选/全不选、立即拉取、同步勾选、设为主 key 都在各自卡片下，
+勾选请求从全局 `/selection` 改成带 `hubKeyId` 的 `/keys/selection`。
+「立即移除」（retired）只在主 key 那一份里给，因为 retired 宽限期表跟着主 key 走。
+连接区改成 CSS grid 对齐（标签/输入框/提示左端对齐且等宽，窄窗口折成一列）。
+
+### 8.4 概览：两个胶囊变成格子，同步行说清分子分母
+
+原来贴在概览右侧的 `realm cn`、`key: credentials` 两个小圆角标签，改成和「面板会话」
+同样的「标题 + 数据」格子排在它后面。文案按网关自己的叫法，不是自创译名——把
+`http://127.0.0.1:8788/` 的面板 HTML 抓下来检索过：`realm` 这套在网关界面里一律叫
+**「版本」**（`cn` = 国内版、`intl` = 国际版），`apiKeySource` 叫 **「API Key 来源」**
+（手动填写 / 凭据库 / 面板自动获取 / 未配置）。
+
+七项改成 `auto-fit` 网格（`minmax(112px, 1fr)`、`8px × 10px` 间距），窗口变窄自动少列多行；
+「今日」那行徽标收窄到 `padding: 0 4px`，并去掉左右各 6px 的负外边距——这样它左端与
+下面「已同步」那行对齐（原来差 6px，视觉上是缩进去的）。告警徽标（缺 Key / 仍是默认密码）
+挪到单独一行，不再跟数字抢宽度。
+
+同步行从 `18 模型` 改成 `6/19 模型`，分子是**所有 key 真正写进 DSH 的模型并集**
+（按 id 去重，未勾选与 `retired` 都不算），分母是网关给的模型总数。
+
+这一格改了三版才对，记在这里免得再走回头路：
+
+1. 第一版直接拿 `snapshot.lastSyncCount`——它是 `syncRoutesToDsh()` 里
+   `count += routeModels.length` 逐条路由累加出来的，同一条模型被几条 key 都勾上就重复计几次。
+   三条 key 6 + 1 + 6 = 13，界面上出现 `13/19`，被当成 bug 问「13 是怎么来的」。
+2. 第二版改成取主 key 那条路由的条数——和同一行右边的主 key `routeKey`、单条 key 的分母
+   都自洽了，但**还是错的**：DSH 的模型选择器里能选到的是并集。
+3. 第三版（现行）：`syncedModelCount(snapshot)` 遍历 `keys[].models` 把 `id` 收进 `Set`。
+   主 key A 启 1/2/3、B 启 2/3/4、C 启 1/5 → 显示 5，不是 3、也不是 3+4+2=9。
+
+老宿主没给 `keys[].models`、或主 key 已被删时，才回落到 `lastSyncCount`。
+
+### 8.5 删掉「打开面板时带上密码」
+
+1.0.12 加过一个开关，允许把 `?pwd=<面板密码>` 拼进深链。它默认关着，但留一个「能把它
+打开」的开关本身就等于承认密码可以进 URL；而 hub 会把收到的请求行原样写进
+`logs/service.log`（`GET /?pwd=…` 明文落盘），浏览器也照样记进历史。1.2.0 把整条链路删掉：
+
+- 配置项 `dashboardIncludePwd`：`DEFAULT_STATE`、`migrateState`、`snapshot()`、
+  `POST /config` 四处分支一起删；
+- 设置页那个复选框和它的说明文字；
+- `GET /dashboard-url` 响应里的 `includePwd` 字段；
+- `buildDashboardUrl()` 的 `pwd` 参数（签名从 `(base, pwd, tab, options)` 收成 `(base, tab)`）。
+
+深链永远只有 `?tab=`。老前端再 POST `dashboardIncludePwd` 会被静默忽略——不用报错，
+它只是个不再生效的字段。
+
+### 8.6 key 卡：折叠与按钮行
+
+- **折叠**：每条 key 的模型表可折叠。默认值由纯函数 `keyFoldOpen(folded, key)` 给
+  ——没点过就按 `isMain`（主 key 摊开、其余收起），点过就照表里的记录。开关就是卡片头上
+  那行「账号 N · 模型 6/19」，带 ▸/▾ 箭头；收起时同一行补「点击展开模型列表」，
+  不再另起一行写说明。三条 key 各 19 个模型全摊开是 57 行，太长。
+- **按钮行**：「设为主 key」贴左，立即拉取 / 全选 / 全不选 / 同步勾选靠右。
+  做法是 `justify-content: flex-end` 配首项 `margin-right: auto`，整行 `flex: 1 1 100%`
+  独占一行；DOM 顺序也把「设为主 key」放最前，Tab 焦点才会跟视觉一致。主 key 那张卡
+  没有「设为主 key」，四个按钮由 `flex-end` 一起靠右。
+- **主标题**：「Key 列表」那行（含副标题与 `3 / 10` 计数）删掉。删标题时连外层那层
+  `styles.card` 一起删——否则里面每条 key 自己还带边框，就成了「空框套实框」，
+  卡片上方会留一条什么都没装的边。
+
+## 9. 未决
+
+原表 #2（`pool-cn` 是否自动拉）、#4（非主 key 默认拉取方式）已被 8.1 推翻：现在没有
+auto/manual 之分，每条 key 每轮都拉。其余各条仍然有效。
+

@@ -76,7 +76,8 @@ describe('插件标识与常量', () => {
     assert.equal(constants.DEFAULT_ROUTE_KEY, 'workbuddy2api-hub')
     assert.equal(constants.DEFAULT_API_KEY_ENV, 'WORKBUDDY2API_HUB_API_KEY')
     assert.equal(constants.DEFAULT_PROVIDER_ENTRY, 'llm-pi-ai')
-    assert.equal(constants.PLUGIN_VERSION, '1.1.1')
+    // 版本号读的是 package.json，发版时只需改一处，这里顺手把它钉住。
+    assert.match(constants.PLUGIN_VERSION, /^\d+\.\d+\.\d+$/)
   })
 
   test('tab 白名单与 hub 的 TABS 一致', () => {
@@ -159,9 +160,9 @@ describe('装好之后就能用', () => {
       const result = await hit(ctx, { url: '/workbuddy2api-hub/api/state' })
       assert.equal(result.body.tab, 'gateway')
       const link = await hit(ctx, { url: '/workbuddy2api-hub/api/dashboard-url' })
-      // 默认不带 pwd：密码不该出现在地址栏、浏览器历史与 hub 的访问日志里。
+      // 深链只带页签：密码不该出现在地址栏、浏览器历史与 hub 的访问日志里。
       assert.match(link.body.url, /\?tab=gateway$/)
-      assert.equal(link.body.url.includes('pwd='), false, '默认不把密码拼进深链')
+      assert.equal(link.body.url.includes('pwd='), false, '密码一律不拼进深链')
     } finally {
       ctx.__dispose()
       await stopMockHub(server)

@@ -54,12 +54,10 @@ window.__ModuleLoader__.load({
       apiKey: 'API Key',
       apiKeyHint: '对话请求用；留空则尝试从面板自动获取',
       interval: '轮询间隔（秒）',
-      dashboardPwd: '打开看板时带上密码',
-      dashboardPwdHint: '关着更安全：密码不会进地址栏和 hub 日志，进面板手输一次即可',
       save: '保存并刷新',
       test: '测试连接',
       testing: '正在测试…',
-      openDashboard: '打开看板',
+      openDashboard: '打开面板',
       refresh: '刷新',
       clear: '移除 DSH 路由',
       clearConfirm: '会从 llm-pi-ai 里删掉本插件写入的路由，并停止自动同步。继续？',
@@ -101,11 +99,13 @@ window.__ModuleLoader__.load({
       rangeAll: '累计',
       tokensUnit: 'tokens',
       creditUnit: '积分',
-      mainKeyBalance: '主key余额',
+      mainKeyBalance: '主 key 余额',
       footerMainDeleted: '主 key 已删除',
       footerAllKeys: '全部 key：',
       reselectHint: '当前会话的模型已失效，请在模型选择器里重新选择',
       keysTitle: 'Key 列表',
+      foldOpen: '点击展开模型列表',
+      foldClose: '点击收起模型列表',
       keysEmpty: '网关里还没有 API Key（先在 hub 面板里创建一个）',
       mainKeyDeletedHint: '已停止同步；重新指定一个主 key 后会自动恢复',
       keyMain: '主 key',
@@ -113,8 +113,6 @@ window.__ModuleLoader__.load({
       keyDeleted: '已删除',
       keyAccounts: '账号',
       keyModels: '模型',
-      pullAuto: '自动拉取',
-      pullManual: '手动拉取',
       pullNow: '立即拉取',
       selectAll: '全选',
       selectNone: '全不选',
@@ -144,6 +142,25 @@ window.__ModuleLoader__.load({
       modelsEnabled: '已启用',
       avgRate: '平均倍率',
       cacheHit: '缓存命中',
+      detailTitle: '用量详情',
+      close: '关闭',
+      currentSession: '当前会话',
+      keyDetail: '各 key 用量',
+      totalRow: '总计',
+      colCost: '等价',
+      allAccounts: '全部账号',
+      noSession: '未使用网关模型',
+      accountUnit: '号',
+      emptyKeyModels: '这条 key 还没拉到模型',
+      badgeOpen: '打开 WorkBuddy Hub 用量详情',
+      realmLabel: '版本',
+      realmCn: '国内版',
+      realmIntl: '国际版',
+      apiKeySourceLabel: 'API Key 来源',
+      apiKeyFromConfig: '手动填写',
+      apiKeyFromCredentials: '凭据库',
+      apiKeyFromPanel: '面板自动获取',
+      apiKeyMissing: '未配置',
       reasons: '告警',
     }
 
@@ -161,12 +178,10 @@ window.__ModuleLoader__.load({
       apiKey: 'API key',
       apiKeyHint: 'Used for chat requests; leave blank to reuse the panel key',
       interval: 'Poll interval (s)',
-      dashboardPwd: 'Include the password when opening the dashboard',
-      dashboardPwdHint: 'Leave off: the password stays out of the address bar and the hub log; type it once in the panel',
       save: 'Save and refresh',
       test: 'Test connection',
       testing: 'Testing…',
-      openDashboard: 'Open dashboard',
+      openDashboard: 'Open panel',
       refresh: 'Refresh',
       clear: 'Remove DSH route',
       clearConfirm: 'Remove the route written by this plugin and stop syncing?',
@@ -213,6 +228,8 @@ window.__ModuleLoader__.load({
       footerAllKeys: 'All keys:',
       reselectHint: 'This session model is gone — pick a model again',
       keysTitle: 'API keys',
+      foldOpen: 'click to expand the model list',
+      foldClose: 'click to collapse the model list',
       keysEmpty: 'No API key on the gateway yet (create one in the hub panel)',
       mainKeyDeletedHint: 'Sync stopped; pick another main key to resume',
       keyMain: 'main',
@@ -220,8 +237,6 @@ window.__ModuleLoader__.load({
       keyDeleted: 'deleted',
       keyAccounts: 'accounts',
       keyModels: 'models',
-      pullAuto: 'auto pull',
-      pullManual: 'manual pull',
       pullNow: 'pull now',
       selectAll: 'all',
       selectNone: 'none',
@@ -251,6 +266,25 @@ window.__ModuleLoader__.load({
       modelsEnabled: 'enabled',
       avgRate: 'Average rate',
       cacheHit: 'Cache hit',
+      detailTitle: 'Usage detail',
+      close: 'Close',
+      currentSession: 'Current session',
+      keyDetail: 'Usage by key',
+      totalRow: 'Total',
+      colCost: 'Cost',
+      allAccounts: 'All accounts',
+      noSession: 'Not using a hub model',
+      accountUnit: 'accts',
+      emptyKeyModels: 'No models pulled for this key yet',
+      badgeOpen: 'Open WorkBuddy Hub usage',
+      realmLabel: 'Version',
+      realmCn: 'China',
+      realmIntl: 'Global',
+      apiKeySourceLabel: 'API key source',
+      apiKeyFromConfig: 'Manual',
+      apiKeyFromCredentials: 'Credential store',
+      apiKeyFromPanel: 'Auto from panel',
+      apiKeyMissing: 'Not set',
       reasons: 'Alerts',
     }
 
@@ -329,7 +363,8 @@ window.__ModuleLoader__.load({
         display: 'inline-flex',
         alignItems: 'center',
         gap: '4px',
-        padding: '1px 7px',
+        padding: '0 6px',
+        minHeight: '18px',
         borderRadius: '999px',
         border: `1px solid ${palette.line}`,
         fontSize: '11px',
@@ -366,6 +401,220 @@ window.__ModuleLoader__.load({
         background: ok ? palette.ok : palette.err,
         display: 'inline-block',
       }),
+    }
+
+
+    /* ------------------------------ 样式注入 ----------------------------- */
+
+    // 照 dsh-token-usage-stats 的做法：CSS 运行时挂一个 <style>，用
+    // data-plugin-css 打标签防重复；不引构建工具，也不污染全局。
+    const CSS_TAG_ID = `${NS}/client.js`
+
+    const CSS = [
+      "/* 侧边栏徽标：字体与颜色完全照 dsh-token-usage-stats 的写法（font:inherit + label-secondary） */",
+      ".wbhub_badge{order:9999;flex:1 0 100%;box-sizing:border-box;width:100%;min-width:0;min-height:36px;color:var(--dsw-alias-label-secondary);font:inherit;cursor:pointer;background:0 0;border:none;border-radius:8px;align-items:center;gap:7px;margin-bottom:4px;padding:6px 8px;text-decoration:none;display:flex;text-align:left}",
+      ".wbhub_badge:hover{background:var(--dsw-alias-interactive-bg-hover);color:var(--dsw-alias-label-primary)}",
+      ".wbhub_badge:focus-visible{outline:2px solid var(--dsw-alias-brand-primary,#2563eb);outline-offset:-2px}",
+      ".wbhub_badgeRail{border-radius:50%;justify-content:center;flex:0 0 auto;width:36px;height:36px;margin-bottom:0;padding:0}",
+      "[class*=footerActions]{flex-wrap:wrap}",
+      ".wbhub_glyph{flex:none;display:block}",
+      ".wbhub_badgeBody{display:flex;flex-direction:column;gap:1px;min-width:0;flex:1 1 auto;line-height:1.3}",
+      ".wbhub_badgeTitle{display:flex;align-items:baseline;gap:6px;min-width:0;font-size:12px;font-weight:600;color:inherit}",
+      ".wbhub_badgeName{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}",
+      // 第一行那串「该 key 余额 / 总余额」跟下面「今日 / 本周」的数字同一套格式：
+      // 11px、label-tertiary、等宽 + tabular-nums，只把字重降回常规（标题行本是 600）。
+      ".wbhub_badgeValue{margin-left:auto;flex:none;font-size:11px;font-weight:400;line-height:15px;color:var(--dsw-alias-label-tertiary,#8b8b93);font-variant-numeric:tabular-nums;font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace}",
+      ".wbhub_badgeBody .wbhub_usageRow{grid-template-columns:26px 1fr;gap:4px;font-size:11px;line-height:15px}",
+      ".wbhub_badgeBody .wbhub_usageLabel{font-size:11px;color:var(--dsw-alias-label-tertiary,#8b8b93)}",
+      ".wbhub_badgeBody .wbhub_usageNums{grid-template-columns:minmax(44px,1fr) minmax(42px,1fr) minmax(50px,1fr);gap:4px;font-size:11px;color:var(--dsw-alias-label-tertiary,#8b8b93)}",
+      ".wbhub_num{font-variant-numeric:tabular-nums;font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace}",
+      "/* 弹窗 */",
+      ".wbhub_popMask{position:fixed;inset:0;z-index:80;background:0 0}",
+      ".wbhub_pop{position:fixed;z-index:81;box-sizing:border-box;width:min(440px,calc(100vw - 16px));max-height:min(72vh,560px);overflow:auto;background:var(--dsw-alias-bg-layer-1,#fff);border:1px solid var(--dsw-alias-border-l1,rgba(120,120,130,.28));border-radius:12px;box-shadow:0 14px 36px rgba(0,0,0,.18);padding:12px 14px;display:flex;flex-direction:column;gap:10px}",
+      ".wbhub_popHead{display:flex;align-items:center;gap:8px}",
+      ".wbhub_popTitle{font-size:13px;font-weight:600;color:var(--dsw-alias-label-primary,#e8e8ea)}",
+      ".wbhub_popClose{margin-left:auto;flex:none;width:24px;height:24px;padding:0;line-height:1;font-size:16px;font-family:inherit;color:var(--dsw-alias-label-secondary,#9a9aa2);background:0 0;border:none;border-radius:6px;cursor:pointer}",
+      ".wbhub_popClose:hover{background:var(--dsw-alias-interactive-bg-hover,rgba(127,127,140,.16));color:var(--dsw-alias-label-primary,#e8e8ea)}",
+      ".wbhub_detail{display:flex;flex-direction:column;gap:12px;padding:14px 16px 16px;font-size:13px;color:var(--dsw-alias-label-primary,#e8e8ea);box-sizing:border-box;max-height:min(70vh,640px);overflow:auto}",
+      ".wbhub_detailHead{display:flex;align-items:center;gap:8px;flex-wrap:wrap;min-width:0}",
+      ".wbhub_detailHead .wbhub_sectionHead{margin-right:auto}",
+      ".wbhub_sectionHead{font-size:12px;font-weight:600;color:var(--dsw-alias-label-secondary,#9a9aa2)}",
+      ".wbhub_metrics{display:grid;grid-template-columns:repeat(auto-fit,minmax(132px,1fr));gap:10px}",
+      ".wbhub_metric{display:flex;flex-direction:column;gap:2px;min-width:0;padding:9px 11px;border:1px solid var(--dsw-alias-border-l1,rgba(255,255,255,.12));border-radius:10px;background:var(--dsw-alias-bg-layer-1,rgba(255,255,255,.03))}",
+      ".wbhub_metricLabel{font-size:11px;color:var(--dsw-alias-label-secondary,#9a9aa2);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}",
+      ".wbhub_metricValue{font-size:17px;font-weight:600;line-height:1.25;color:var(--dsw-alias-label-primary,#e8e8ea);font-variant-numeric:tabular-nums;font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace}",
+      ".wbhub_metricUnit{margin-left:3px;font-size:11px;font-weight:400;color:var(--dsw-alias-label-tertiary,#8b8b93)}",
+      ".wbhub_usage{display:flex;flex-direction:column;gap:5px}",
+      ".wbhub_usageRow{display:grid;grid-template-columns:34px 1fr;align-items:baseline;gap:6px;font-size:12px;line-height:17px}",
+      ".wbhub_usageLabel{color:var(--dsw-alias-label-secondary,#9a9aa2);white-space:nowrap}",
+      ".wbhub_usageNums{display:grid;grid-template-columns:minmax(58px,1fr) minmax(56px,1fr) minmax(62px,1fr);align-items:baseline;gap:8px;justify-items:end;color:var(--dsw-alias-label-primary,#e8e8ea);font-variant-numeric:tabular-nums;font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace}",
+      ".wbhub_num{text-align:right;white-space:nowrap}",
+      ".wbhub_usageTable{display:flex;flex-direction:column;gap:2px}",
+      ".wbhub_usageHead{display:grid;grid-template-columns:34px 1fr;gap:6px;padding-bottom:2px;font-size:11px;color:var(--dsw-alias-label-tertiary,#8b8b93)}",
+      ".wbhub_usageHead .wbhub_usageNums{color:var(--dsw-alias-label-tertiary,#8b8b93)}",
+      ".wbhub_usageItem{display:flex;flex-direction:column;gap:1px;padding:7px 0;border-top:1px solid var(--dsw-alias-border-l1,rgba(127,127,140,.18))}",
+      ".wbhub_usageItem:first-of-type{border-top:0;padding-top:2px}",
+      ".wbhub_usageTitle{display:flex;align-items:center;gap:6px;min-width:0;font-size:12px}",
+      ".wbhub_usageName{font-weight:600;color:var(--dsw-alias-label-primary,#e8e8ea);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}",
+      ".wbhub_usageMeta{font-size:11px;color:var(--dsw-alias-label-tertiary,#8b8b93);white-space:nowrap}",
+      ".wbhub_usageTotal{display:flex;flex-direction:column;gap:1px;margin-top:2px;padding-top:7px;border-top:1px solid var(--dsw-alias-border-l2,rgba(127,127,140,.32))}",
+      ".wbhub_keyList{display:flex;flex-direction:column}",
+      ".wbhub_keyRow{display:grid;grid-template-columns:9px minmax(0,1fr) auto;align-items:center;gap:9px;padding:7px 0;border-top:1px solid var(--dsw-alias-border-l1,rgba(255,255,255,.12));font-size:12px}",
+      ".wbhub_keyRow:first-child{border-top:0;padding-top:0}",
+      ".wbhub_keyDot{width:7px;height:7px;border-radius:50%;background:var(--dsw-alias-state-idle-primary,#6f6f78)}",
+      ".wbhub_keyDotOn{background:var(--dsw-alias-brand-primary,#4d8dff)}",
+      ".wbhub_keyMain{min-width:0}",
+      ".wbhub_keyName{color:var(--dsw-alias-label-primary,#e8e8ea);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}",
+      ".wbhub_keyMeta{margin-left:6px;font-size:11px;color:var(--dsw-alias-label-tertiary,#8b8b93);white-space:nowrap}",
+      ".wbhub_keyNums{justify-self:end;color:var(--dsw-alias-label-secondary,#9a9aa2);font-variant-numeric:tabular-nums;font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;white-space:nowrap}",
+      ".wbhub_detailNote{font-size:11px;line-height:16px;color:var(--dsw-alias-label-secondary,#9a9aa2)}",
+      ".wbhub_footActions{display:flex;flex-wrap:wrap;gap:8px;justify-content:flex-end;align-items:center;padding-top:2px}",
+
+      "/* 设置页 */",
+      ".wbhub_panel{display:flex;flex-direction:column;gap:14px;font-size:13px;color:var(--dsw-alias-label-primary,#e8e8ea)}",
+      ".wbhub_form{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:10px 14px;align-items:start}",
+      ".wbhub_field{display:flex;flex-direction:column;gap:4px;min-width:0}",
+      ".wbhub_fieldLabel{font-size:12px;line-height:16px;color:var(--dsw-alias-label-secondary,#9a9aa2)}",
+      ".wbhub_fieldHint{font-size:11px;line-height:15px;color:var(--dsw-alias-label-tertiary,#8b8b93)}",
+      ".wbhub_actions{display:flex;flex-wrap:wrap;align-items:center;gap:8px}",
+      ".wbhub_stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(112px,1fr));gap:8px 10px}",
+      ".wbhub_chips{display:flex;flex-wrap:wrap;align-items:center;gap:4px;margin:0}",
+      ".wbhub_chips > span:not(.wbhub_chipsLabel){padding:0 4px!important}",
+      ".wbhub_chipsLabel{font-size:11px;color:var(--dsw-alias-label-secondary,#a1a1a8);flex:0 0 auto;margin-right:1px}",
+      ".wbhub_notice{display:flex;flex-wrap:wrap;align-items:center;gap:6px}",
+      ".wbhub_keyCard{display:flex;flex-direction:column;gap:8px;min-width:0;padding:10px 12px;border:1px solid var(--dsw-alias-border-l1,rgba(255,255,255,.12));border-radius:10px;background:var(--dsw-alias-bg-layer-1,rgba(255,255,255,.03))}",
+      ".wbhub_keyHead{display:flex;flex-wrap:wrap;align-items:center;gap:8px;min-width:0}",
+      ".wbhub_keyTitle{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:13px;font-weight:600;color:var(--dsw-alias-label-primary,#e8e8ea)}",
+      ".wbhub_keyMasked{font-size:11px;color:var(--dsw-alias-label-tertiary,#8b8b93);font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace}",
+      ".wbhub_keyKeyActions{display:flex;flex-wrap:wrap;align-items:center;justify-content:flex-end;gap:6px;flex:1 1 100%}",
+      ".wbhub_setMain{margin-right:auto}",
+      ".wbhub_keyFoot{font-size:11px;line-height:16px;color:var(--dsw-alias-label-tertiary,#8b8b93)}",
+      ".wbhub_keyFold{align-items:center;gap:4px;margin:0;padding:1px 5px;font:inherit;font-size:11px;line-height:16px;color:var(--dsw-alias-label-secondary,#9a9aa2);background:0 0;border:none;border-radius:6px;cursor:pointer;display:inline-flex}",
+      ".wbhub_keyFold:hover{background:var(--dsw-alias-interactive-bg-hover,rgba(255,255,255,.08));color:var(--dsw-alias-label-primary,#e8e8ea)}",
+      ".wbhub_keyFold:focus-visible{outline:2px solid var(--dsw-alias-brand-primary,#2563eb);outline-offset:-2px}",
+      ".wbhub_keyFoldArrow{font-size:9px;line-height:1}",
+      ".wbhub_tableWrap{min-width:0;overflow-x:auto}",
+      ".wbhub_table{width:100%;border-collapse:collapse;font-size:12px}",
+      ".wbhub_table th{text-align:left;white-space:nowrap;padding:6px 8px;font-size:11px;font-weight:500;color:var(--dsw-alias-label-secondary,#9a9aa2);border-bottom:1px solid var(--dsw-alias-border-l1,rgba(255,255,255,.12))}",
+      ".wbhub_table td{padding:6px 8px;vertical-align:middle;border-bottom:1px solid var(--dsw-alias-border-l1,rgba(255,255,255,.12))}",
+      ".wbhub_table tbody tr:last-child td{border-bottom:0}",
+      ".wbhub_colCheck{width:28px}",
+      ".wbhub_colNum{text-align:right;white-space:nowrap;font-variant-numeric:tabular-nums;color:var(--dsw-alias-label-primary,#e8e8ea)}",
+      ".wbhub_colEfforts{white-space:nowrap}",
+      ".wbhub_cellName{display:flex;flex-direction:column;gap:2px;min-width:0}",
+      ".wbhub_cellId{font-size:11px;color:var(--dsw-alias-label-tertiary,#8b8b93);font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace}",
+      ".wbhub_tags{display:flex;flex-wrap:wrap;gap:4px;margin-top:3px}",
+    ].join('\n')
+
+    /**
+     * 把插件样式挂到 document.head，只挂一次。
+     *
+     * 单测跑在 node:vm 里、没有 DOM，这时直接返回 false，不让样式把 apply 拖崩。
+     * @returns 这次是否真的插入了。
+     */
+    function injectStyles() {
+      if (typeof document === 'undefined' || document === null) return false
+      if (typeof document.createElement !== 'function' || typeof document.querySelector !== 'function') return false
+      try {
+        const selector = `style[data-plugin-css="${CSS_TAG_ID}"]`
+        if (document.querySelector(selector) !== null) return false
+        const tag = document.createElement('style')
+        tag.dataset.pluginCss = CSS_TAG_ID
+        tag.textContent = CSS
+        const host = document.head ?? document.documentElement
+        if (host === null || host === undefined || typeof host.appendChild !== 'function') return false
+        host.appendChild(tag)
+        return true
+      } catch (error) {
+        console.warn(`[${NS}] 样式注入失败`, error)
+        return false
+      }
+    }
+
+    /* ------------------------------ 公共小件 ----------------------------- */
+
+    /**
+     * 徽标图标：一枚钱包轮廓。
+     *
+     * 用钱包而不是柱状图——这一格讲的是「还剩多少额度」，不是「用了多少」。
+     * @param props.size - 边长（像素）。
+     */
+    function HubGlyph(props) {
+      const size = Number(props?.size) > 0 ? Number(props.size) : 16
+      return h(
+        'svg',
+        {
+          className: 'wbhub_glyph',
+          width: size,
+          height: size,
+          viewBox: '0 0 16 16',
+          'aria-hidden': 'true',
+          focusable: 'false',
+        },
+        h('rect', {
+          x: 1.6,
+          y: 3.4,
+          width: 12.8,
+          height: 9.4,
+          rx: 2.2,
+          fill: 'none',
+          stroke: 'currentColor',
+          strokeWidth: 1.3,
+        }),
+        h('path', { d: 'M1.6 6.6h12.8', stroke: 'currentColor', strokeWidth: 1.3, strokeLinecap: 'round' }),
+        h('circle', { cx: 11.1, cy: 9.5, r: 1.05, fill: 'currentColor' }),
+      )
+    }
+
+    /**
+     * 贴着徽标上沿弹出来的副窗（不是居中模态）。
+     *
+     * 位置由徽标自己量出来的 `getBoundingClientRect()` 给出：`anchor` 记「左边距」
+     * 与「距窗口底边多少」，宽态/收起态都能贴住按钮。点外面那层透明遮罩即关闭。
+     * @param props.open - 是否展开。
+     * @param props.onClose - 关闭回调。
+     * @param props.title - 标题。
+     * @param props.closeLabel - 关闭按钮的无障碍文案。
+     * @param props.anchor - `{ left, bottom }`，缺省贴在左下角。
+     */
+    function HubOverlay(props) {
+      if (props.open !== true) return null
+      const close = typeof props.onClose === 'function' ? props.onClose : () => {}
+      const anchor = props.anchor ?? null
+      const style =
+        anchor === null || anchor === undefined
+          ? { left: '8px', bottom: '56px' }
+          : {
+              left: `${Math.max(8, Math.round(Number(anchor.left) || 0))}px`,
+              bottom: `${Math.max(8, Math.round(Number(anchor.bottom) || 0))}px`,
+            }
+      return h(
+        'div',
+        { className: 'wbhub_popMask', onClick: close },
+        h(
+          'div',
+          {
+            className: 'wbhub_pop',
+            role: 'dialog',
+            'aria-modal': 'false',
+            style,
+            onClick: (event) => {
+              if (typeof event?.stopPropagation === 'function') event.stopPropagation()
+            },
+          },
+          h(
+            'div',
+            { className: 'wbhub_popHead' },
+            h('strong', { className: 'wbhub_popTitle' }, props.title),
+            h(
+              'button',
+              { type: 'button', className: 'wbhub_popClose', 'aria-label': props.closeLabel, onClick: close },
+              '×',
+            ),
+          ),
+          props.children,
+        ),
+      )
     }
 
     /* ------------------------------ 网络层 ------------------------------ */
@@ -664,12 +913,85 @@ window.__ModuleLoader__.load({
     }
 
     /** 数字格式化：大数用 k/M，方便一屏放下。 */
+    /** realm 是网关的「版本」：cn 国内版、intl 国际版，其余原样显示。 */
+    function realmText(snapshot, t) {
+      const realm = snapshot?.health?.realm
+      if (realm === '' || realm === undefined || realm === null) return '—'
+      if (realm === 'cn') return t('realmCn')
+      if (realm === 'intl') return t('realmIntl')
+      return String(realm)
+    }
+
+    /** API Key 从哪来：手填 / 凭据库 / 面板自动取。cached 只是内存里还留着同一把。 */
+    function apiKeySourceText(source, t) {
+      if (source === 'config') return t('apiKeyFromConfig')
+      if (source === 'credentials' || source === 'cached') return t('apiKeyFromCredentials')
+      if (source === 'panel') return t('apiKeyFromPanel')
+      return t('apiKeyMissing')
+    }
+
+    /**
+     * 一条 key 的模型表当前是展开还是收起。
+     * 没点过时主 key 展开、其余收起；点过一次就完全照 folded 记的选择走。
+     * @param {object} folded - 形如 { [hubKeyId]: boolean } 的显式选择
+     * @param {object} key - keyProjections() 里的一条
+     * @returns {boolean} true 表示摊开
+     */
+    function keyFoldOpen(folded, key) {
+      const chosen = folded === null || folded === undefined ? undefined : folded[key?.hubKeyId]
+      if (chosen === undefined) return key?.isMain === true
+      return chosen === true
+    }
+
+    /**
+     * 「已同步 N 个模型」里的 N：取主 key 那条路由的条数。
+     *
+     * `snapshot.lastSyncCount` 是**所有 key 路由加起来的**条数（每条 key 写一条 provider，
+     * 三条各 6 / 1 / 6 就是 13），而同一行右边写的是主 key 的 `routeKey`、分母是单条 key
+     * 的模型目录总数（19）——拿合计当分子，两边都对不上。主 key 不在网关里时（被删了）
+     * 回落到合计值，总比不显示强。
+     */
+    function syncedModelCount(snapshot) {
+      const main = keyListOf(snapshot).find((key) => key.isMain === true)
+      if (main !== undefined && main !== null) return Number(main.lastSyncCount) || 0
+      return Number(snapshot?.lastSyncCount) || 0
+    }
+
+    /**
+     * 「已同步 N/M 模型」里的 N：所有 key 真正写进 DSH 的模型**并集**（按 id 去重）。
+     *
+     * 每条 key 一条 provider 路由，同一条模型经常被好几条 key 同时勾上——把各自路由的
+     * 条数加起来（6 + 1 + 6 = 13）会把重复的算好几遍，比「DSH 的模型选择器里实际能选到
+     * 几个」偏大。真正能选到的是并集：勾上的、且没下架的。
+     *
+     * `snapshot.lastSyncCount` 正好就是那个「加起来」的数（`syncRoutesToDsh()` 里
+     * `count += routeModels.length`），所以只有老宿主没给 `models` 时才拿它兜底。
+     */
+    function syncedModelCount(snapshot) {
+      const ids = new Set()
+      for (const key of keyListOf(snapshot)) {
+        const models = Array.isArray(key?.models) ? key.models : []
+        for (const model of models) {
+          if (model === null || model === undefined) continue
+          if (model.enabled === false || model.retired === true) continue
+          if (typeof model.id === 'string' && model.id !== '') ids.add(model.id)
+        }
+      }
+      if (ids.size > 0) return ids.size
+      return Number(snapshot?.lastSyncCount) || 0
+    }
+
+    /**
+     * tokens 用 k/M/B 缩写，一律保留两位小数（1234 → 1.23k）。
+     * 三位数以下原样输出——整数个 token 加 `.00` 只是噪声。
+     */
     function formatNumber(value) {
       const number = Number(value) || 0
-      if (number >= 1e9) return `${Math.round(number / 1e8) / 10}B`
-      if (number >= 1e6) return `${Math.round(number / 1e5) / 10}M`
-      if (number >= 1e3) return `${Math.round(number / 1e2) / 10}k`
-      return String(number)
+      if (number >= 1e9) return `${(number / 1e9).toFixed(2)}B`
+      if (number >= 1e6) return `${(number / 1e6).toFixed(2)}M`
+      if (number >= 1e3) return `${(number / 1e3).toFixed(2)}k`
+      // 用户要求「所有数字都保留两位小数」：三位数以下也补 .00，整列才对得齐
+  return number.toFixed(2)
     }
 
     /** 相对时间：刚刚 / N 分钟前 / N 小时前。 */
@@ -714,9 +1036,11 @@ window.__ModuleLoader__.load({
       const [busy, setBusy] = useState('')
       const [notice, setNotice] = useState('')
       const [probe, setProbe] = useState(null)
+      // 每条 key 的模型表默认只在主 key 上摊开，其余收起来，免得三份表一路铺到底。
+      const [folded, setFolded] = useState({})
 
       // 快照回来后把表单同步成服务端状态；用户正在输入时（draft 已被改过）不覆盖。
-      const serverKey = snapshot === null ? '' : `${snapshot.baseUrl}|${snapshot.tab}|${snapshot.intervalSeconds}|${snapshot.dashboardIncludePwd}|${snapshot.policy?.newModelPolicy}|${snapshot.policy?.retireHours}|${snapshot.policy?.thresholds?.lowCredits}`
+      const serverKey = snapshot === null ? '' : `${snapshot.baseUrl}|${snapshot.tab}|${snapshot.intervalSeconds}|${snapshot.policy?.newModelPolicy}|${snapshot.policy?.retireHours}|${snapshot.policy?.thresholds?.lowCredits}`
 
       const form = draft ?? {
         baseUrl: snapshot?.baseUrl ?? '',
@@ -724,7 +1048,6 @@ window.__ModuleLoader__.load({
         tab: snapshot?.tab ?? 'gateway',
         apiKey: '',
         intervalSeconds: snapshot?.intervalSeconds ?? 120,
-        dashboardIncludePwd: snapshot?.dashboardIncludePwd === true,
         newModelPolicy: snapshot?.policy?.newModelPolicy ?? 'select',
         retireHours: snapshot?.policy?.retireHours ?? 24,
         lowCredits: snapshot?.policy?.thresholds?.lowCredits ?? 50,
@@ -751,7 +1074,6 @@ window.__ModuleLoader__.load({
           baseUrl: form.baseUrl,
           tab: form.tab,
           intervalSeconds: Number(form.intervalSeconds) || 120,
-          dashboardIncludePwd: form.dashboardIncludePwd === true,
           autoApiKey: form.autoApiKey,
           policy: {
             newModelPolicy: form.newModelPolicy,
@@ -803,16 +1125,26 @@ window.__ModuleLoader__.load({
         await post('clear', { confirm: true }, 'clear')
       }
 
-      const toggleModel = async (row) => {
-        await post('selection', { id: row.id, enabled: row.enabled !== true }, `model:${row.id}`)
+      /** 勾掉 / 勾上某一条 key 下的某个模型（只影响这一条 key）。 */
+      const toggleModel = async (key, row) => {
+        await post(
+          'keys/selection',
+          { hubKeyId: key.hubKeyId, id: row.id, enabled: row.enabled !== true },
+          `model:${key.hubKeyId}:${row.id}`,
+        )
       }
 
-      const toggleEffort = async (row, level) => {
+      /** 改某一条 key 下某个模型的思考档位（同样只影响这一条 key）。 */
+      const toggleEffort = async (key, row, level) => {
         const current = Array.isArray(row.selectedEfforts) ? row.selectedEfforts : row.efforts
         const next = current.includes(level) ? current.filter((item) => item !== level) : [...current, level]
         // 至少留一个正档：全裁掉的话 pi-ai 会拒绝这份档案，整条路由都注册不上。
         if (next.filter((item) => item !== 'off').length === 0) return
-        await post('selection', { id: row.id, efforts: next }, `effort:${row.id}`)
+        await post(
+          'keys/selection',
+          { hubKeyId: key.hubKeyId, id: row.id, efforts: next },
+          `effort:${key.hubKeyId}:${row.id}`,
+        )
       }
 
       const head = h(
@@ -871,11 +1203,11 @@ window.__ModuleLoader__.load({
         h('div', { style: styles.row }, h('strong', null, t('connection'))),
         h(
           'div',
-          { style: styles.row },
+          { className: 'wbhub_form' },
           h(
             'label',
-            { style: styles.field },
-            h('span', { style: styles.label }, t('baseUrl')),
+            { className: 'wbhub_field' },
+            h('span', { className: 'wbhub_fieldLabel' }, t('baseUrl')),
             h('input', {
               style: styles.input,
               value: form.baseUrl ?? '',
@@ -883,12 +1215,12 @@ window.__ModuleLoader__.load({
               spellCheck: false,
               onChange: (event) => patch({ baseUrl: event.target.value }),
             }),
-            h('span', { style: styles.hint }, t('baseUrlHint')),
+            h('span', { className: 'wbhub_fieldHint' }, t('baseUrlHint')),
           ),
           h(
             'label',
-            { style: styles.field },
-            h('span', { style: styles.label }, t('pwd')),
+            { className: 'wbhub_field' },
+            h('span', { className: 'wbhub_fieldLabel' }, t('pwd')),
             h('input', {
               style: styles.input,
               type: 'password',
@@ -897,12 +1229,12 @@ window.__ModuleLoader__.load({
               autoComplete: 'off',
               onChange: (event) => patch({ pwd: event.target.value }),
             }),
-            h('span', { style: styles.hint }, t('pwdHint')),
+            h('span', { className: 'wbhub_fieldHint' }, t('pwdHint')),
           ),
           h(
             'label',
-            { style: styles.field },
-            h('span', { style: styles.label }, t('tab')),
+            { className: 'wbhub_field' },
+            h('span', { className: 'wbhub_fieldLabel' }, t('tab')),
             h(
               'select',
               {
@@ -918,11 +1250,11 @@ window.__ModuleLoader__.load({
         ),
         h(
           'div',
-          { style: styles.row },
+          { className: 'wbhub_form' },
           h(
             'label',
-            { style: styles.field },
-            h('span', { style: styles.label }, t('apiKey')),
+            { className: 'wbhub_field' },
+            h('span', { className: 'wbhub_fieldLabel' }, t('apiKey')),
             h('input', {
               style: styles.input,
               type: 'password',
@@ -931,12 +1263,12 @@ window.__ModuleLoader__.load({
               autoComplete: 'off',
               onChange: (event) => patch({ apiKey: event.target.value }),
             }),
-            h('span', { style: styles.hint }, t('apiKeyHint')),
+            h('span', { className: 'wbhub_fieldHint' }, t('apiKeyHint')),
           ),
           h(
             'label',
-            { style: styles.field },
-            h('span', { style: styles.label }, t('interval')),
+            { className: 'wbhub_field' },
+            h('span', { className: 'wbhub_fieldLabel' }, t('interval')),
             h('input', {
               style: styles.input,
               type: 'number',
@@ -946,25 +1278,10 @@ window.__ModuleLoader__.load({
               onChange: (event) => patch({ intervalSeconds: event.target.value }),
             }),
           ),
-          h(
-            'div',
-            { style: styles.field },
-            h(
-              'label',
-              { style: { ...styles.row, gap: '6px' } },
-              h('input', {
-                type: 'checkbox',
-                checked: form.dashboardIncludePwd === true,
-                onChange: (event) => patch({ dashboardIncludePwd: event.target.checked }),
-              }),
-              h('span', { style: styles.label }, t('dashboardPwd')),
-            ),
-            h('span', { style: styles.hint }, t('dashboardPwdHint')),
-          ),
         ),
         h(
           'div',
-          { style: styles.row },
+          { className: 'wbhub_actions' },
           h(Button, { primary: true, onClick: save, disabled: busy !== '' }, busy === 'save' ? '…' : t('save')),
           h(Button, { onClick: test, disabled: busy !== '' }, busy === 'test' ? t('testing') : t('test')),
           h(Button, { onClick: openDashboard, disabled: busy !== '' }, t('openDashboard')),
@@ -986,25 +1303,21 @@ window.__ModuleLoader__.load({
               { style: styles.card },
               h(
                 'div',
-                { style: styles.row },
+                { className: 'wbhub_stats' },
                 h(Stat, { label: t('balance'), value: snapshot.balance === null || snapshot.balance === undefined ? '—' : `${snapshot.balance.balance} ${snapshot.balance.unit}` }),
                 h(Stat, { label: t('modelsEnabled'), value: `${snapshot.counts?.enabled ?? 0}/${snapshot.counts?.total ?? 0}` }),
                 h(Stat, { label: t('avgRate'), value: snapshot.averageRate > 0 ? `×${snapshot.averageRate}` : '—' }),
                 h(Stat, { label: t('accounts'), value: `${snapshot.accounts?.ready ?? 0}/${snapshot.accounts?.total ?? 0}` }),
                 h(Stat, { label: t('loginState'), value: snapshot.loggedIn === true ? t('loggedIn') : t('loggedOut') }),
-                h('span', { style: { flex: '1 1 auto' } }),
-                h(Badge, { title: snapshot.baseUrl }, snapshot.health?.realm === '' || snapshot.health?.realm === undefined ? 'hub' : `realm ${snapshot.health.realm}`),
-                snapshot.apiKeySource === ''
-                  ? h(Badge, { style: { color: palette.warn } }, t('noApiKey'))
-                  : h(Badge, null, `key: ${snapshot.apiKeySource}`),
-                snapshot.pwdIsDefault === true ? h(Badge, { style: { color: palette.warn } }, t('pwdDefault')) : null,
+                h(Stat, { label: t('realmLabel'), value: realmText(snapshot, t) }),
+                h(Stat, { label: t('apiKeySourceLabel'), value: apiKeySourceText(snapshot.apiKeySource, t) }),
               ),
               snapshot.usage === null || snapshot.usage === undefined
                 ? null
                 : h(
                     'div',
-                    { style: styles.row },
-                    h('span', { style: styles.hint }, t('usageToday')),
+                    { className: 'wbhub_chips' },
+                    h('span', { className: 'wbhub_chipsLabel' }, t('usageToday')),
                     h(Badge, null, `${t('requests')} ${formatNumber(snapshot.usage.requests)}`),
                     h(Badge, null, `${t('errors')} ${formatNumber(snapshot.usage.errors)}${snapshot.usage.errorRate > 0 ? ` (${snapshot.usage.errorRate}%)` : ''}`),
                     h(Badge, null, `${t('tokens')} ${formatNumber(snapshot.usage.totalTokens)}`),
@@ -1012,80 +1325,88 @@ window.__ModuleLoader__.load({
                     h(Badge, null, `${t('cacheHit')} ${snapshot.usage.cacheHitRate}%`),
                     h(Badge, null, `${t('cost')} ¥${snapshot.usage.costCny}`),
                   ),
+              snapshot.apiKeySource === '' || snapshot.pwdIsDefault === true
+                ? h(
+                    'div',
+                    { className: 'wbhub_notice' },
+                    snapshot.apiKeySource === '' ? h(Badge, { style: { color: palette.warn } }, t('noApiKey')) : null,
+                    snapshot.pwdIsDefault === true ? h(Badge, { style: { color: palette.warn } }, t('pwdDefault')) : null,
+                  )
+                : null,
               snapshot.lastSyncAt > 0
                 ? h(
                     'div',
                     { style: styles.row },
-                    h('span', { style: styles.hint }, `${t('synced')} ${timeAgo(snapshot.lastSyncAt, t)} · ${snapshot.lastSyncCount} ${t('models')}`),
+                    h('span', { style: styles.hint }, `${t('synced')} ${timeAgo(snapshot.lastSyncAt, t)} · ${syncedModelCount(snapshot)}/${snapshot.counts?.total ?? snapshot.lastSyncCount} ${t('models')}`),
                     h('span', { style: styles.hint }, `${t('routeKey')}: ${snapshot.routeKey}`),
                     h('span', { style: styles.hint }, `${t('pluginVersion')} ${snapshot.pluginVersion}`),
                   )
                 : null,
             )
 
-      /* ------------------------------- 模型表 ------------------------------ */
-      const rows = Array.isArray(snapshot?.models) ? sortRowsByName(snapshot.models) : []
-      const modelCard = h(
-        'section',
-        { style: styles.card },
-        h(
+      /* ------------------------------ 模型表 ------------------------------ */
+
+      /**
+       * 一条 key 自己的模型表。
+       *
+       * 勾选状态是按 key 存的（`key.selection`），所以开关必须带 `hubKeyId`
+       * 打到 `/keys/selection`；全局的 `/selection` 只改主 key，多 key 下会改错人。
+       * @param key - `keyProjections()` 里的一条投影。
+       */
+      const modelTable = (key) => {
+        const rows = sortRowsByName(Array.isArray(key.models) ? key.models : [])
+        if (rows.length === 0) {
+          return h('div', { className: 'wbhub_keyFoot' }, loading ? t('loading') : t('emptyKeyModels'))
+        }
+        return h(
           'div',
-          { style: styles.row },
-          h('strong', null, t('models')),
-          h('span', { style: styles.hint }, `${rows.length}`),
-          h('span', { style: { flex: '1 1 auto' } }),
-          h(Button, { onClick: () => post('bulk', { enabled: true }, 'bulk') }, t('all')),
-          h(Button, { onClick: () => post('bulk', { enabled: false }, 'bulk') }, t('none')),
-          Array.isArray(snapshot?.newModels) && snapshot.newModels.length > 0
-            ? h(Button, { onClick: () => post('enable-new', {}, 'enable-new') }, `${t('enableNew')} (${snapshot.newModels.length})`)
-            : null,
-        ),
-        rows.length === 0
-          ? h('div', { style: styles.hint }, loading ? t('loading') : t('noModels'))
-          : h(
-              'table',
-              { style: styles.table },
+          { className: 'wbhub_tableWrap' },
+          h(
+            'table',
+            { className: 'wbhub_table' },
+            h(
+              'thead',
+              null,
               h(
-                'thead',
+                'tr',
                 null,
+                h('th', { className: 'wbhub_colCheck' }, t('enabled')),
+                h('th', null, t('model')),
+                h('th', null, t('rate')),
+                h('th', null, t('context')),
+                h('th', null, t('output')),
+                h('th', null, t('efforts')),
+              ),
+            ),
+            h(
+              'tbody',
+              null,
+              ...rows.map((row) =>
                 h(
                   'tr',
-                  null,
-                  h('th', { style: styles.th }, ''),
-                  h('th', { style: styles.th }, t('model')),
-                  h('th', { style: styles.th }, t('rate')),
-                  h('th', { style: styles.th }, t('context')),
-                  h('th', { style: styles.th }, t('output')),
-                  h('th', { style: styles.th }, t('efforts')),
-                ),
-              ),
-              h(
-                'tbody',
-                null,
-                ...rows.map((row) =>
+                  { key: row.id, style: row.retired === true ? { opacity: 0.55 } : undefined },
                   h(
-                    'tr',
-                    { key: row.id, style: row.retired === true ? { opacity: 0.55 } : undefined },
+                    'td',
+                    { className: 'wbhub_colCheck' },
+                    h('input', {
+                      type: 'checkbox',
+                      checked: row.enabled === true,
+                      disabled: busy !== '',
+                      onChange: () => toggleModel(key, row),
+                      'aria-label': `${key.name} ${row.id}`,
+                    }),
+                  ),
+                  h(
+                    'td',
+                    null,
                     h(
-                      'td',
-                      { style: { ...styles.td, width: '26px' } },
-                      h('input', {
-                        type: 'checkbox',
-                        checked: row.enabled === true,
-                        disabled: busy !== '',
-                        onChange: () => toggleModel(row),
-                        'aria-label': row.id,
-                      }),
-                    ),
-                    h(
-                      'td',
-                      { style: styles.td },
-                      h('div', { style: { display: 'flex', flexDirection: 'column', gap: '2px' } }, h('span', null, row.name),
-                        h('span', { style: { ...styles.hint, ...styles.mono } }, row.id),
-                      ),
+                      'div',
+                      { className: 'wbhub_cellName' },
+                      h('span', null, row.name),
+                      h('span', { className: 'wbhub_cellId' }, row.id),
                       h(
                         'div',
-                        { style: { display: 'flex', gap: '4px', flexWrap: 'wrap', marginTop: '3px' } },
+                        { className: 'wbhub_tags' },
                         row.vision === true ? h(Badge, null, 'vision') : null,
                         row.tools === true ? h(Badge, null, 'tools') : null,
                         row.retired === true
@@ -1093,11 +1414,18 @@ window.__ModuleLoader__.load({
                               'span',
                               { style: { ...styles.badge, color: palette.warn, gap: '6px' } },
                               t('retired'),
-                              h('button', {
-                                type: 'button',
-                                style: { ...styles.button, padding: '0 6px', fontSize: '10px' },
-                                onClick: () => post('retire', { id: row.id }, `retire:${row.id}`),
-                              }, t('removeNow')),
+                              // 「立即移除」动的是 retired 宽限期表，那张表跟着主 key 走。
+                              key.isMain === true
+                                ? h(
+                                    'button',
+                                    {
+                                      type: 'button',
+                                      style: { ...styles.button, padding: '0 6px', fontSize: '10px' },
+                                      onClick: () => post('retire', { id: row.id }, `retire:${row.id}`),
+                                    },
+                                    t('removeNow'),
+                                  )
+                                : null,
                             )
                           : null,
                         Array.isArray(snapshot?.newModels) && snapshot.newModels.includes(row.id)
@@ -1105,124 +1433,145 @@ window.__ModuleLoader__.load({
                           : null,
                       ),
                     ),
-                    h('td', { style: styles.td }, row.rateText === '' ? '—' : row.rateText),
-                    h('td', { style: styles.td }, row.contextWindow > 0 ? formatNumber(row.contextWindow) : '—'),
-                    h('td', { style: styles.td }, row.maxTokens > 0 ? formatNumber(row.maxTokens) : '—'),
-                    h(
-                      'td',
-                      { style: styles.td },
-                      Array.isArray(row.efforts) && row.efforts.length > 0
-                        ? h(
-                            'div',
-                            { style: { display: 'flex', gap: '4px', flexWrap: 'wrap' } },
-                            ...row.efforts.map((level) => {
-                              const active =
-                                Array.isArray(row.selectedEfforts) ? row.selectedEfforts.includes(level) : true
-                              return h(
-                                'button',
-                                {
-                                  key: level,
-                                  type: 'button',
-                                  disabled: busy !== '',
-                                  onClick: () => toggleEffort(row, level),
-                                  style: {
-                                    ...styles.badge,
-                                    cursor: 'pointer',
-                                    font: 'inherit',
-                                    // 用主题色自身的透明度混色：深浅两套主题下都不会出现「浅底浅字」。
-                                    background: active ? `color-mix(in srgb, ${palette.accent} 18%, transparent)` : 'transparent',
-                                    color: active ? palette.accent : palette.muted,
-                                    borderColor: active ? palette.accent : palette.line,
-                                    padding: '1px 7px',
-                                  },
+                  ),
+                  h('td', { className: 'wbhub_colNum' }, row.rateText === '' ? '—' : row.rateText),
+                  h('td', { className: 'wbhub_colNum' }, row.contextWindow > 0 ? formatNumber(row.contextWindow) : '—'),
+                  h('td', { className: 'wbhub_colNum' }, row.maxTokens > 0 ? formatNumber(row.maxTokens) : '—'),
+                  h(
+                    'td',
+                    { className: 'wbhub_colEfforts' },
+                    Array.isArray(row.efforts) && row.efforts.length > 0
+                      ? h(
+                          'div',
+                          { style: { display: 'flex', gap: '4px', flexWrap: 'wrap' } },
+                          ...row.efforts.map((level) => {
+                            const active =
+                              Array.isArray(row.selectedEfforts) ? row.selectedEfforts.includes(level) : true
+                            return h(
+                              'button',
+                              {
+                                key: level,
+                                type: 'button',
+                                disabled: busy !== '',
+                                onClick: () => toggleEffort(key, row, level),
+                                style: {
+                                  ...styles.badge,
+                                  cursor: 'pointer',
+                                  font: 'inherit',
+                                  // 用主题色自身的透明度混色：深浅两套主题下都不会出现「浅底浅字」。
+                                  background: active
+                                    ? `color-mix(in srgb, ${palette.accent} 18%, transparent)`
+                                    : 'transparent',
+                                  color: active ? palette.accent : palette.muted,
+                                  borderColor: active ? palette.accent : palette.line,
+                                  padding: '1px 7px',
                                 },
-                                level,
-                              )
-                            }),
-                          )
-                        : h('span', { style: styles.hint }, '—'),
-                    ),
+                              },
+                              level,
+                            )
+                          }),
+                        )
+                      : h('span', { className: 'wbhub_keyFoot' }, '—'),
                   ),
                 ),
               ),
             ),
-      )
+          ),
+        )
+      }
 
       /* ------------------------------ Key 列表 ----------------------------- */
       // 网关里每条 key 都是独立身份：自己的模型集、自己的勾选、自己的用量。
-      // 这里只做「开关与触发」，具体取舍都在宿主侧。
+      // 所以模型表也挂在每条 key 下面，一个开关只影响它自己那一行。
       const keyRows = keyListOf(snapshot)
+      // 没点过就按「主 key 展开、其余收起」算，点过一次就记住选择。
+      const isKeyOpen = (key) => keyFoldOpen(folded, key)
+      const toggleKey = (key) => setFolded((prev) => ({ ...prev, [key.hubKeyId]: !isKeyOpen(key) }))
+      // 去掉「Key 列表」标题后，这层再套一张卡片就只剩空边框了；
+      // 每条 key 自己就是一张卡，外面只需要一个纵向排列的容器。
       const keyCard = h(
-        'section',
-        { style: styles.card },
-        h(
-          'div',
-          { style: styles.row },
-          h('strong', null, t('keysTitle')),
-          h('span', { style: { ...styles.hint, marginLeft: 'auto' } }, `${keyRows.length} / ${snapshot?.maxKeys ?? 10}`),
-        ),
+        'div',
+        { style: { display: 'flex', flexDirection: 'column', gap: 10 } },
         snapshot?.mainKeyMissing === true
           ? h(
               'div',
-              { style: { ...styles.banner('error'), display: 'flex', alignItems: 'center', gap: '8px' } },
+              { style: { ...styles.banner('error'), alignItems: 'center' } },
               h('span', null, t('footerMainDeleted')),
-              h('span', { style: styles.hint }, t('mainKeyDeletedHint')),
+              h('span', { className: 'wbhub_fieldHint' }, t('mainKeyDeletedHint')),
             )
           : null,
         keyRows.length === 0
-          ? h('div', { style: styles.hint }, t('keysEmpty'))
+          ? h('div', { className: 'wbhub_keyFoot' }, t('keysEmpty'))
           : keyRows.map((key) =>
               h(
                 'div',
-                {
-                  key: key.hubKeyId,
-                  style: {
-                    ...styles.row,
-                    alignItems: 'center',
-                    gap: '8px',
-                    flexWrap: 'wrap',
-                    borderTop: `1px solid ${palette.line}`,
-                    paddingTop: '6px',
-                    marginTop: '2px',
-                  },
-                },
-                h('span', { style: { color: key.missing === true ? palette.err : palette.text, fontWeight: 600 } }, key.name),
-                h('span', { style: { ...styles.mono, color: palette.muted, fontSize: '11px' } }, key.masked),
-                key.isMain === true ? h(Badge, null, t('keyMain')) : null,
-                key.missing === true ? h(Badge, null, key.deleted === true ? t('keyDeleted') : t('keyMissing')) : null,
+                { key: key.hubKeyId, className: 'wbhub_keyCard' },
                 h(
-                  'span',
-                  { style: styles.hint },
-                  `${t('keyAccounts')} ${key.accounts ?? 0} · ${t('keyModels')} ${key.counts?.enabled ?? 0}/${key.counts?.total ?? 0}`,
-                ),
-                h(
-                  'span',
-                  { style: { marginLeft: 'auto', display: 'flex', gap: '6px', flexWrap: 'wrap' } },
+                  'div',
+                  { className: 'wbhub_keyHead' },
                   h(
-                    Button,
+                    'span',
+                    { className: 'wbhub_keyTitle', style: key.missing === true ? { color: palette.err } : undefined },
+                    key.name,
+                  ),
+                  h('span', { className: 'wbhub_keyMasked' }, key.masked),
+                  key.isMain === true ? h(Badge, null, t('keyMain')) : null,
+                  key.missing === true
+                    ? h(Badge, null, key.deleted === true ? t('keyDeleted') : t('keyMissing'))
+                    : null,
+                  h(
+                    'button',
                     {
-                      onClick: () => post('keys/pull-mode', { hubKeyId: key.hubKeyId, pull: key.pull === 'auto' ? 'manual' : 'auto' }, 'pull'),
-                      disabled: busy !== '',
+                      type: 'button',
+                      className: 'wbhub_keyFold',
+                      'aria-expanded': isKeyOpen(key) === true,
+                      onClick: () => toggleKey(key),
                     },
-                    key.pull === 'auto' ? t('pullAuto') : t('pullManual'),
+                    h('span', { className: 'wbhub_keyFoldArrow', 'aria-hidden': 'true' }, isKeyOpen(key) ? '▾' : '▸'),
+                    `${t('keyAccounts')} ${key.accounts ?? 0} · ${t('keyModels')} ${key.counts?.enabled ?? 0}/${key.counts?.total ?? 0} · ${isKeyOpen(key) === true ? t('foldClose') : t('foldOpen')}`,
                   ),
-                  h(Button, { onClick: () => post('keys/pull', { hubKeyId: key.hubKeyId }, 'pull'), disabled: busy !== '' }, t('pullNow')),
-                  h(Button, { onClick: () => post('bulk', { hubKeyId: key.hubKeyId, enabled: true }, 'bulk'), disabled: busy !== '' }, t('selectAll')),
-                  h(Button, { onClick: () => post('bulk', { hubKeyId: key.hubKeyId, enabled: false }, 'bulk'), disabled: busy !== '' }, t('selectNone')),
                   h(
-                    Button,
-                    { onClick: () => post('keys/sync-selection', { from: key.hubKeyId }, 'sync'), disabled: busy !== '' },
-                    t('syncSelection'),
+                    'span',
+                    { className: 'wbhub_keyKeyActions' },
+                    key.isMain === true
+                      ? null
+                      : h(
+                          'span',
+                          { className: 'wbhub_setMain' },
+                          h(
+                            Button,
+                            { onClick: () => post('keys/main', { hubKeyId: key.hubKeyId }, 'main'), disabled: busy !== '' },
+                            t('setMain'),
+                          ),
+                        ),
+                    h(
+                      Button,
+                      { onClick: () => post('keys/pull', { hubKeyId: key.hubKeyId }, 'pull'), disabled: busy !== '' },
+                      t('pullNow'),
+                    ),
+                    h(
+                      Button,
+                      { onClick: () => post('bulk', { hubKeyId: key.hubKeyId, enabled: true }, 'bulk'), disabled: busy !== '' },
+                      t('selectAll'),
+                    ),
+                    h(
+                      Button,
+                      { onClick: () => post('bulk', { hubKeyId: key.hubKeyId, enabled: false }, 'bulk'), disabled: busy !== '' },
+                      t('selectNone'),
+                    ),
+                    h(
+                      Button,
+                      { onClick: () => post('keys/sync-selection', { from: key.hubKeyId }, 'sync'), disabled: busy !== '' },
+                      t('syncSelection'),
+                    ),
                   ),
-                  key.isMain === true
-                    ? null
-                    : h(Button, { onClick: () => post('keys/main', { hubKeyId: key.hubKeyId }, 'main'), disabled: busy !== '' }, t('setMain')),
                 ),
+                isKeyOpen(key) === true ? modelTable(key) : null,
                 key.lastError !== undefined && key.lastError !== ''
-                  ? h('span', { style: { color: palette.err, fontSize: '11px', flexBasis: '100%' } }, key.lastError)
+                  ? h('span', { style: { color: palette.err, fontSize: '11px' } }, key.lastError)
                   : null,
                 key.lastSyncError !== undefined && key.lastSyncError !== ''
-                  ? h('span', { style: { color: palette.warn, fontSize: '11px', flexBasis: '100%' } }, key.lastSyncError)
+                  ? h('span', { style: { color: palette.warn, fontSize: '11px' } }, key.lastSyncError)
                   : null,
               ),
             ),
@@ -1303,7 +1652,7 @@ window.__ModuleLoader__.load({
 
       return h(
         'div',
-        { style: styles.wrap, 'data-dsh-plugin': NS },
+        { className: 'wbhub_panel', style: styles.wrap, 'data-dsh-plugin': NS },
         head,
         errorBanner,
         alerts,
@@ -1312,7 +1661,6 @@ window.__ModuleLoader__.load({
         syncError,
         connectionCard,
         overview,
-        modelCard,
         keyCard,
         policyCard,
       )
@@ -1364,15 +1712,17 @@ window.__ModuleLoader__.load({
      * `global` 是整个 realm 的额度（可能是几十万）——两个数量级不同的数字
      * 放在一起必须带号数，否则看着像 bug。
      */
-    function balanceLines(snapshot) {
-      const main = mainKeyOf(snapshot)
-      const detail = snapshot?.mainKeyBalance ?? null
+    function balanceLines(snapshot, key = null) {
+      // 余额按 key 算：后端在每条 key 上给了 `balance`（该 key 绑定账号的 credits.remain
+      // 之和）。没传 key、或老宿主没给这个字段时，退回主 key 的那份。
+      const target = key ?? mainKeyOf(snapshot)
+      const detail = target?.balance ?? snapshot?.mainKeyBalance ?? null
       const remain = Number(detail?.remain)
       const global = snapshot?.balance ?? null
       return {
-        main: main?.missing === true ? 'deleted' : Number.isFinite(remain) ? formatCredit(remain) : '—',
-        mainAccounts: Number(detail?.bound) || (Number.isFinite(Number(main?.accounts)) ? Number(main.accounts) : 0),
-        mainName: typeof main?.name === 'string' ? main.name : '',
+        main: target?.missing === true ? 'deleted' : Number.isFinite(remain) ? formatCredit(remain) : '—',
+        mainAccounts: Number(detail?.bound) || (Number.isFinite(Number(target?.accounts)) ? Number(target.accounts) : 0),
+        mainName: typeof target?.name === 'string' ? target.name : '',
         global: global === null || global === undefined ? '—' : formatCredit(global.balance),
         globalAccounts: Number(global?.accountsEnabled) || 0,
       }
@@ -1406,92 +1756,148 @@ window.__ModuleLoader__.load({
       }
     }
     /**
-     * 侧边栏底部徽标（三项：主 key 余额 + 全局 / 今日 / 本周）。
+     * 侧边栏底部的 WorkBuddy 徽标。
      *
-     * 第二、三行跟着「当前会话用的那条 key」走：切会话自动切数字，
-     * 不需要额外请求（`/state` 里已经把每条 key 的用量一起带回来了）。
-     * 当前会话用的不是网关模型时，回落成主 key 的数据。
-     * 点一下打开 hub 看板——比让用户自己找设置页再点按钮顺手。
+     * 三行：`<当前 key 名> 该 key 余额 / 总余额`、`今日 tokens 积分 等价`、
+     * `本周` 同三项。数字跟着「当前会话用的那条 key」走，会话没走网关模型时
+     * 回落主 key；口径与网关看板一致（tokens 用 k/M/B 缩写，积分与等价金额两位小数）。
+     *
+     * 点徽标弹出的是贴着它上沿的副窗，不是居中模态：再点一下、点外面或按 × 收起。
      */
     function HubFooter(props) {
       const t = props.t ?? ((key) => zh[key] ?? key)
       const { snapshot, error } = useStore()
+      const [open, setOpen] = useState(false)
       const [opening, setOpening] = useState(false)
+      const [anchor, setAnchor] = useState(null)
       const currentProvider = useCurrentProvider()
+      const wide = props.wide === true
 
       const current = keyByProvider(snapshot, currentProvider) ?? mainKeyOf(snapshot)
       const summary = footerSummary(snapshot, 'today', current)
       const week = footerSummary(snapshot, 'week', current)
-      const balances = balanceLines(snapshot)
+      const balances = balanceLines(snapshot, current)
       // 老宿主（< 1.0.5）没有 usageWeek：这一行干脆不画，别拿今日的数冒充本周。
       const hasWeek =
         current !== null && current !== undefined
           ? current.usageWeek !== null && current.usageWeek !== undefined
           : snapshot?.usageWeek !== null && snapshot?.usageWeek !== undefined
-      const rangeKey =
-        summary.range === 'today' ? 'rangeToday' : summary.range === 'week' ? 'rangeWeek' : summary.range === 'month' ? 'rangeMonth' : 'rangeAll'
       const tone = error !== '' || snapshot === null ? palette.faint : snapshot.health?.ok === true ? palette.ok : palette.err
       const keys = keyListOf(snapshot)
       // 当前会话选的 provider 是我们写进去的，但模型已经不在目录里了：
       // 这是「主 key 被删」或「这条 key 的模型全被取消勾选」，只能让用户重选。
       const stale = currentProvider !== '' && keyByProvider(snapshot, currentProvider) !== null && providerState.routable === false
-
-      /** 一行用量：`今日 tokens 72.3M · 积分 61.41 · API 等价 ¥10.39`。 */
-      const usageLine = (label, item) =>
-        `${label} ${t('tokensUnit')} ${item.tokens} · ${t('creditUnit')} ${item.credit} · ${t('footerApiCost')} ${item.cost}`
-
       const mainBalanceText = balances.main === 'deleted' ? t('footerMainDeleted') : balances.main
+      const providerLabel = current !== null && current !== undefined ? current.name : t('noSession')
+      // 徽标第一行写哪条 key：跟着会话走；会话没走网关就写主 key 的名字。
+      const badgeName =
+        current !== null && current !== undefined && typeof current.name === 'string' && current.name !== ''
+          ? current.name
+          : t('footerLabel')
 
-      const title = [
-        `${t('footerLabel')} · ${t('mainKeyBalance')} ${mainBalanceText}${balances.mainAccounts > 0 ? `（${balances.mainAccounts} 号）` : ''}`,
-        `${t('footerBalance')} ${balances.global}${balances.globalAccounts > 0 ? `（${balances.globalAccounts} 号）` : ''}`,
-        current === null ? usageLine(t(rangeKey), summary) : usageLine(`${t(rangeKey)} · ${current.name}`, summary),
-        hasWeek ? usageLine(t('rangeWeek'), week) : '',
-        stale ? t('reselectHint') : '',
-        keys.length > 1 ? t('footerAllKeys') : '',
-        ...keys.map(
-          (key) =>
-            `${key.hubKeyId === current?.hubKeyId ? '●' : '○'} ${key.name} · ${t('creditUnit')} ${formatCredit(key.usage?.credit ?? 0)} / ${formatNumber(key.usage?.totalTokens ?? 0)}`,
-        ),
-        error !== '' ? error : snapshot?.baseUrl ?? '',
-      ]
-        .filter((line) => line !== '')
-        .join('\n')
-
-      /**
-       * 一行「窗口名在左、三个数字在右」。
-       *
-       * 左标签固定宽度对齐（今日 / 本周都是两个字，靠 `minWidth` 兜住英文的
-       * Today / This week），右侧 `marginLeft: auto` 把三个数字顶到最右，
-       * 两行数字因此上下对齐、一眼能比出今日与本周的差距。
-       */
-      const usageRow = (label, item) =>
+      /** 三个数（tokens / 积分 / 等价）：三列等宽、各自右对齐。 */
+      const usageNums = (item) =>
         h(
           'span',
-          {
-            style: {
-              display: 'flex',
-              alignItems: 'baseline',
-              gap: '8px',
-              paddingLeft: '14px',
-              fontSize: '11px',
-              lineHeight: '15px',
-              whiteSpace: 'nowrap',
-            },
-          },
-          h('span', { style: { color: palette.muted, minWidth: '44px' } }, label),
+          { className: 'wbhub_usageNums' },
+          h('span', { className: 'wbhub_num' }, item.tokens),
+          h('span', { className: 'wbhub_num' }, item.credit),
+          h('span', { className: 'wbhub_num' }, item.cost),
+        )
+
+      const usageRow = (label, item) =>
+        h(
+          'div',
+          { className: 'wbhub_usageRow' },
+          h('span', { className: 'wbhub_usageLabel' }, label),
+          usageNums(item),
+        )
+
+      /**
+       * 一条 key 的今日/本周用量。
+       *
+       * **不回落全局**：这条 key 没数据就是「—」，拿全站的数冒充单 key 会误导。
+       */
+      const keyUsage = (usage) =>
+        usage === null || usage === undefined
+          ? { tokens: '—', credit: '—', cost: '—' }
+          : {
+              tokens: formatNumber(usage.totalTokens),
+              credit: formatCredit(usage.credit),
+              cost: formatCny(usage.costCny),
+            }
+
+      /** 一块「标签 + 大数字」。 */
+      const metric = (label, value, unit) =>
+        h(
+          'div',
+          { className: 'wbhub_metric' },
+          h('span', { className: 'wbhub_metricLabel' }, label),
           h(
             'span',
-            { style: { marginLeft: 'auto', display: 'flex', alignItems: 'baseline', gap: '5px', ...styles.mono, color: palette.text } },
-            h('span', null, item.tokens),
-            h('span', { style: { color: palette.faint } }, '·'),
-            h('span', null, item.credit),
-            h('span', { style: { color: palette.faint } }, '·'),
-            h('span', null, item.cost),
+            { className: 'wbhub_metricValue' },
+            value,
+            unit === undefined || unit === '' ? null : h('span', { className: 'wbhub_metricUnit' }, unit),
           ),
         )
 
-      const open = async () => {
+      /** 列标题：tokens / 积分 / 等价，与下面的数字列同宽。 */
+      const usageHead = h(
+        'div',
+        { className: 'wbhub_usageHead' },
+        h('span', { className: 'wbhub_usageLabel' }, ''),
+        h(
+          'span',
+          { className: 'wbhub_usageNums' },
+          h('span', { className: 'wbhub_num' }, t('tokensUnit')),
+          h('span', { className: 'wbhub_num' }, t('creditUnit')),
+          h('span', { className: 'wbhub_num' }, t('colCost')),
+        ),
+      )
+
+      /**
+       * 弹窗里的「各 key 用量」：一条 key 一段，末尾总计。
+       *
+       * 每段是 `/usage/analytics` 里网关按 API Key 分好的 `window`，一个数都不加工；
+       * 总计直接用 `/usage` 的整域汇总（网关「数据看板」顶部那行就是它）。
+       * 2026-10-25 实测：三条 key 的 window 相加与整域 tokens / credit / ¥ 差都是 0，
+       * 两种口径等价——那就别再自己加，网关给什么显示什么。
+       */
+      const usageTable = h(
+        'div',
+        { className: 'wbhub_usageTable' },
+        usageHead,
+        ...keys.map((key) =>
+          h(
+            'div',
+            { key: key.hubKeyId, className: 'wbhub_usageItem' },
+            h(
+              'div',
+              { className: 'wbhub_usageTitle' },
+              h('span', {
+                className: `wbhub_keyDot${key.hubKeyId === current?.hubKeyId ? ' wbhub_keyDotOn' : ''}`,
+              }),
+              h('span', { className: 'wbhub_usageName' }, key.name),
+              h('span', { className: 'wbhub_usageMeta' }, `${t('keyAccounts')} ${key.accounts ?? 0}`),
+            ),
+            usageRow(t('rangeToday'), keyUsage(key.usage)),
+            key.usageWeek === null || key.usageWeek === undefined
+              ? null
+              : usageRow(t('rangeWeek'), keyUsage(key.usageWeek)),
+          ),
+        ),
+        h(
+          'div',
+          { className: 'wbhub_usageTotal' },
+          h('div', { className: 'wbhub_usageTitle' }, h('span', { className: 'wbhub_usageName' }, t('totalRow'))),
+          usageRow(t('rangeToday'), keyUsage(snapshot?.usage)),
+          snapshot?.usageWeek === null || snapshot?.usageWeek === undefined
+            ? null
+            : usageRow(t('rangeWeek'), keyUsage(snapshot?.usageWeek)),
+        ),
+      )
+
+      const openDashboard = async () => {
         if (opening) return
         setOpening(true)
         const result = await requestJson('dashboard-url')
@@ -1501,62 +1907,109 @@ window.__ModuleLoader__.load({
         }
       }
 
-      if (props.wide === true) {
-        return h(
-          'button',
-          {
-            type: 'button',
-            onClick: open,
-            title,
-            style: {
-              ...styles.button,
-              width: '100%',
-              display: 'flex',
-              flexDirection: 'column',
-              alignItems: 'stretch',
-              gap: '2px',
-              padding: '6px 8px',
-              textAlign: 'left',
-            },
-          },
-          // 第一行：主 key 余额 + 全局余额（全局那个更小更淡，是背景信息）。
-          h(
-            'span',
-            { style: { display: 'flex', alignItems: 'baseline', gap: '6px' } },
-            h('span', { style: styles.dot(tone === palette.ok) }),
-            h('span', { style: { color: palette.text, fontWeight: 600 } }, t('footerLabel')),
-            h('span', { style: { marginLeft: 'auto', ...styles.mono, color: palette.text } }, mainBalanceText),
-            h('span', { style: { ...styles.mono, color: palette.muted, fontSize: '10px' } }, `/ ${balances.global}`),
-          ),
-          // 第二、三行：窗口名贴左（两行左边缘对齐），三个数字贴右（右边缘也对齐）。
-          usageRow(t(rangeKey), summary),
-          hasWeek ? usageRow(t('rangeWeek'), week) : null,
+      /** 点徽标：量出自己在屏幕上的位置，副窗贴着上沿弹。 */
+      const toggle = (event) => {
+        if (open === true) {
+          setOpen(false)
+          return
+        }
+        const rect =
+          event !== null && event !== undefined && typeof event.currentTarget?.getBoundingClientRect === 'function'
+            ? event.currentTarget.getBoundingClientRect()
+            : null
+        const viewport = typeof window !== 'undefined' && Number(window.innerHeight) > 0 ? Number(window.innerHeight) : 800
+        setAnchor(
+          rect === null
+            ? null
+            : { left: Number(rect.left) || 0, bottom: Math.max(8, viewport - (Number(rect.top) || 0) + 6) },
         )
+        setOpen(true)
       }
 
-      return h(
+      const badge = h(
         'button',
         {
           type: 'button',
-          onClick: open,
-          title,
-          style: {
-            ...styles.button,
-            padding: '4px 2px',
-            display: 'flex',
-            flexDirection: 'column',
-            alignItems: 'center',
-            gap: '1px',
-            background: 'transparent',
-            border: 'none',
-          },
+          className: wide ? 'wbhub_badge' : 'wbhub_badge wbhub_badgeRail',
+          'aria-label': t('badgeOpen'),
+          'aria-haspopup': 'dialog',
+          'aria-expanded': open === true,
+          onClick: toggle,
         },
-        h('span', { style: styles.dot(tone === palette.ok) }),
-        // 收起态只有 ~48px：主 key 余额 + 今日积分各一行，其余看 title。
-        h('span', { style: { fontSize: '11px', color: palette.text, ...styles.mono } }, balances.main === 'deleted' ? '!' : balances.main),
-        h('span', { style: { fontSize: '9px', color: palette.muted, ...styles.mono } }, summary.credit),
+        // 图标沿用主题色（`currentColor`）：跟着 hover 一起变亮，不用另配一套。
+        h(HubGlyph, { size: wide ? 15 : 18 }),
+        wide
+          ? h(
+              'span',
+              { className: 'wbhub_badgeBody' },
+              h(
+                'span',
+                { className: 'wbhub_badgeTitle' },
+                h('span', { className: 'wbhub_badgeName' }, badgeName),
+                h('span', { className: 'wbhub_badgeValue' }, `${mainBalanceText} / ${balances.global}`),
+              ),
+              usageRow(t('rangeToday'), summary),
+              hasWeek === true ? usageRow(t('rangeWeek'), week) : null,
+            )
+          : null,
       )
+
+      const detail = h(
+        'div',
+        { className: 'wbhub_detail' },
+        h(
+          'div',
+          { className: 'wbhub_detailHead' },
+          h('span', { className: 'wbhub_sectionHead' }, t('currentSession')),
+          h('span', { className: 'wbhub_keyName' }, providerLabel),
+          h('span', {
+            className: 'wbhub_keyDot',
+            style: { background: tone },
+            title: snapshot === null || error !== '' ? t('loadFailed') : snapshot.health?.ok === true ? t('health') : t('loadFailed'),
+          }),
+        ),
+        h(
+          'div',
+          { className: 'wbhub_metrics' },
+          metric(`${badgeName} ${t('footerBalance')}`, mainBalanceText, t('creditUnit')),
+          metric(t('allAccounts'), balances.global, t('creditUnit')),
+        ),
+        keys.length === 0
+          ? null
+          : h(
+              'div',
+              null,
+              h('div', { className: 'wbhub_sectionHead' }, t('keyDetail')),
+              usageTable,
+            ),
+        stale === true ? h('div', { className: 'wbhub_detailNote' }, t('reselectHint')) : null,
+        error !== '' ? h('div', { className: 'wbhub_detailNote', style: { color: palette.err } }, error) : null,
+        typeof snapshot?.baseUrl === 'string' && snapshot.baseUrl !== ''
+          ? h('div', { className: 'wbhub_detailNote' }, snapshot.baseUrl)
+          : null,
+        h(
+          'div',
+          { className: 'wbhub_footActions' },
+          h(Button, { primary: true, onClick: openDashboard, disabled: opening === true }, opening === true ? '…' : t('openDashboard')),
+          h(Button, { onClick: () => setOpen(false) }, t('close')),
+        ),
+      )
+
+      const overlay = h(
+        HubOverlay,
+        {
+          open,
+          anchor,
+          onClose: () => setOpen(false),
+          title: `${t('footerLabel')} · ${t('detailTitle')}`,
+          closeLabel: t('close'),
+        },
+        detail,
+      )
+
+      return h(react.Fragment, null, badge, overlay)
     }
+
     /* ------------------------------- 插件入口 ---------------------------- */
 
     /**
@@ -1575,6 +2028,9 @@ window.__ModuleLoader__.load({
     /** 插件主体。 */
     function apply(ctx) {
       const t = ctx.locale.bind(NS)
+
+      // 样式先挂上：下面两个插槽随时可能立刻渲染，晚一步就是一片没样式的原生控件。
+      injectStyles()
 
       ctx.effect(() => ctx.locale.register(NS, { zh, en }), `${NS}: dictionaries`)
 
@@ -1634,6 +2090,14 @@ window.__ModuleLoader__.load({
     exports.__providerSnapshot = providerSnapshot
     exports.__setProviderState = setProviderState
     exports.__attachProviderSource = attachProviderSource
+    exports.__css = CSS
+    exports.__injectStyles = injectStyles
+    exports.__HubGlyph = HubGlyph
+    exports.__HubOverlay = HubOverlay
+    exports.__keyFoldOpen = keyFoldOpen
+    exports.__syncedModelCount = syncedModelCount
+    exports.__realmText = realmText
+    exports.__apiKeySourceText = apiKeySourceText
     return module.exports
   },
 })
