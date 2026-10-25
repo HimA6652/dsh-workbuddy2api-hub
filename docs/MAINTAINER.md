@@ -45,8 +45,7 @@ bundle 末尾挂了一串 `exports.__*`，只为测试和手工排查用，宿�
 | 概览「已同步 N/M 模型」 | 分子 `syncedModelCount()`（各 key `models` 的并集去重）、分母 `snapshot.counts.total` | 去重计数 |
 | 概览「额度 / 已启用 / 平均倍率 / 账号」 | `balance.balance`、`counts.enabled`、`averageRate`、`accounts.enabled/total` | 四位里只有倍率是网关给的原始浮点 |
 
-2026-10-25 实测（端口 53007，`pluginVersion 1.2.0`）：三条 key 的 `window` 相加
-`168,548,549 tokens / 706.71 积分 / ¥49.31` 与整域**三项差都是 0**（三条 key 的账号不重叠），
+实测（几条 key 绑的账号互不重叠）：各 key 的 `window` 相加与整域**三项差都是 0**，
 所以「总计」直接取整域、不自己求和。哪天网关允许一个账号挂到多条 key 上，这里就会不等
 ——那时以整域（面板顶部那行）为准。
 
