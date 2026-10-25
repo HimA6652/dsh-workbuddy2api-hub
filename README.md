@@ -14,10 +14,12 @@ DSH 设置页 / 侧边栏  ←  /workbuddy2api-hub/api/*  ──┘        └�
 ## 功能
 
 - **连接面板**：服务地址、面板密码、默认页签、轮询间隔；「测试连接」「立即同步」「打开看板」「清空同步」。
+- **多 key**：网关里有几条 API Key 就同步几条 provider（一 key 一条路由、一条凭据）。主 key 固定 `workbuddy2api-hub`，其余 `workbuddy2api-hub-<名字>`；主 key 之外默认「手动拉取」，只有点了「立即拉取」才去问网关。
 - **模型同步**：把 `/v1/models` 写进 `llm-pi-ai` 的 `providers.workbuddy2api-hub`，每个模型带上 `contextWindow` / `maxTokens` / 图片输入 / 思考档位；按模型名称排序（不区分大小写、数字按数值），设置页表格与写进 DSH 的顺序一致。模型名后面直接带网关的倍率（`GLM-5.1 ×0.79`），免费模型标 `Free`——倍率写不进名字，选择器里就看不见。
+- **多 key 的排布**：一个 key ↔ 一条 provider 路由 ↔ 一条凭据引用。路由键建好就不再变（主 key 恒 `workbuddy2api-hub`，其余 `workbuddy2api-hub-<名字>`），所以网关里改 key 的名字、换倍率，都不会让会话里已经选中的模型消失。网关里删掉某条 key → 那条路由自动撤掉；删掉的是主 key → 徽标显示「主 key 已删除」、会话提示重新选模型，**不会拿别的 key 偷偷顶替**。余额没法按 key 拆（网关的 `/v1/balance-summary` 是整域汇总），所以第一行给的是「主 key 绑定的账号余额之和」+「整域余额」，两个数都带账号数。
 - **增量与容错**：模型下架先进宽限期（默认 24 小时，可一键立即移除），回来能复活；内容没变就不写配置，避免每次轮询都触发一次配置更新；配置冲突自动重取 revision 重试。
 - **余额与用量**：`/v1/balance-summary` 的 credit 余额，`/usage?range=today` 的请求数 / 失败数 / tokens / credit / API 等价花费 / 缓存命中。
-- **侧边栏徽标**：展开态三行——`● WorkBuddy … 3715.39` / `今日 72.3M · 61.41 · ¥10.39` / `本周 260.7M · 465.43 · ¥31.17`；窗口名贴左、三个数字贴右，依次是 tokens / 积分消耗 / API 等价花费。悬停能看完整数字和连接地址，点一下直接打开 hub 看板。
+- **侧边栏徽标**：展开态三行——第一行是「主 key 余额 + 全局余额」，第二三行是今日 / 本周的 `tokens · 积分 · API 等价花费`；窗口名贴左、三个数字贴右。**第二三行跟着当前会话用的那条 key 走**：会话选的是 `pool-cn` 的模型，显示的就是 pool-cn 的用量，切会话自动切，且不为此多发一个请求；会话用的不是网关模型时回落到主 key。悬停能看全部 key 一行一条（`●` 标当前）、完整数字和连接地址，点一下直接打开 hub 看板。
 - **告警**：连不上、密码错、登录被限流、缺 API Key、额度低于阈值、账号需要重登——都能「知道了」消掉 24 小时。
 - **不崩**：hub 没开、密码错、超时、返回 HTML、返回半截 JSON，插件都只把它变成一段中文提示；`/state` 永远返回 200，前端永远有东西可渲染。
 
@@ -109,6 +111,7 @@ dsh plugin --profile desktop add github:HimA6652/dsh-workbuddy2api-hub
 | `apiKeyEnv` | `WORKBUDDY2API_HUB_API_KEY` | DSH 凭据库里的引用名 |
 | `providerEntry` | `llm-pi-ai` | 写到哪个 settings 的 ns 下 |
 | `routeKey` | `workbuddy2api-hub` | 写进 `providers.<routeKey>`。**故意不叫 `wb`**，免得覆盖你已有的路由 |
+| `maxKeys` | `10` | 最多同步几条网关 key（1–50）。超出的只读不写，避免一次刷出几十个 provider |
 | `intervalSeconds` | `120` | 轮询间隔，下限 30、上限 3600；连续失败会指数退避到 30 分钟 |
 | `dashboardIncludePwd` | `false` | 「打开看板」时是否把密码拼进链接。默认不拼——`?pwd=` 会进地址栏、浏览器历史，还会被 hub 写进自己的访问日志；关着就在面板里手输一次 |
 | `sync` | `true` | 关掉就只看数据、不写模型 |
@@ -149,7 +152,10 @@ dsh plugin --profile desktop add github:HimA6652/dsh-workbuddy2api-hub
 | GET | `/accounts` | 只刷账号 |
 | GET | `/dashboard-url` | 看板深链（默认只带 `tab`，`dashboardIncludePwd` 打开才带 `pwd`），**只给本机** |
 | POST | `/config` | 改地址 / 密码 / 页签 / 间隔 / API Key |
-| POST | `/selection` `/bulk` `/enable-new` | 勾选模型、全选/全不选、新模型默认策略 |
+| POST | `/selection` `/bulk` `/enable-new` | 勾选模型、全选/全不选、新模型默认策略（带 `hubKeyId` 就只作用于那条 key） |
+| POST | `/keys/pull` `/keys/pull-mode` | 立刻拉一次某条 key 的模型 / 改它的拉取方式（`auto` / `manual`） |
+| POST | `/keys/selection` `/keys/sync-selection` | 单独改某条 key 的勾选 / 把一条 key 的勾选同步到别的 key |
+| POST | `/keys/main` | 指定哪条 key 是主 key（只换身份，不改它已有的路由键） |
 | POST | `/refresh` `/test` `/policy` `/dismiss` `/retire` `/clear` | 同步、探测、策略、消警、立即移除、清空同步 |
 
 写接口有三道闸：只接受本机来源（`127.0.0.1` / `::1` / `::ffff:127.0.0.1`）、`sec-fetch-site` 必须是 `same-origin` 或 `none` 且 `Origin` 与 `Host` 一致、`content-type` 必须是 JSON。响应不带任何 CORS 头——这样同机网页用 `no-cors` 的简单请求也打不进写接口。
@@ -189,7 +195,7 @@ ls -l ~/.dsh/profiles/desktop/node_modules/dsh-workbuddy2api-hub
 ```bash
 git clone https://github.com/HimA6652/dsh-workbuddy2api-hub.git
 cd dsh-workbuddy2api-hub
-npm test                                # 88 个测试，跑在假宿主 + 假 hub 上，不需要起 DSH
+npm test                                # 103 个测试，跑在假宿主 + 假 hub 上，不需要起 DSH
 node scripts/mock-hub.mjs --port 8789   # 起一个假 hub，用来手工点界面
 node scripts/smoke-live.mjs --json      # 对真实 hub 做只读联调
 npm run check                           # 确认没有把凭据/本机路径写进仓库

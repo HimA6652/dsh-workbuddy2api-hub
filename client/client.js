@@ -101,6 +101,25 @@ window.__ModuleLoader__.load({
       rangeAll: '累计',
       tokensUnit: 'tokens',
       creditUnit: '积分',
+      mainKeyBalance: '主key余额',
+      footerMainDeleted: '主 key 已删除',
+      footerAllKeys: '全部 key：',
+      reselectHint: '当前会话的模型已失效，请在模型选择器里重新选择',
+      keysTitle: 'Key 列表',
+      keysEmpty: '网关里还没有 API Key（先在 hub 面板里创建一个）',
+      mainKeyDeletedHint: '已停止同步；重新指定一个主 key 后会自动恢复',
+      keyMain: '主 key',
+      keyMissing: '已消失',
+      keyDeleted: '已删除',
+      keyAccounts: '账号',
+      keyModels: '模型',
+      pullAuto: '自动拉取',
+      pullManual: '手动拉取',
+      pullNow: '立即拉取',
+      selectAll: '全选',
+      selectNone: '全不选',
+      syncSelection: '同步勾选',
+      setMain: '设为主 key',
       requests: '请求',
       errors: '错误',
       tokens: 'Token',
@@ -189,6 +208,25 @@ window.__ModuleLoader__.load({
       rangeAll: 'Total',
       tokensUnit: 'tokens',
       creditUnit: 'credits',
+      mainKeyBalance: 'Main key',
+      footerMainDeleted: 'main key deleted',
+      footerAllKeys: 'All keys:',
+      reselectHint: 'This session model is gone — pick a model again',
+      keysTitle: 'API keys',
+      keysEmpty: 'No API key on the gateway yet (create one in the hub panel)',
+      mainKeyDeletedHint: 'Sync stopped; pick another main key to resume',
+      keyMain: 'main',
+      keyMissing: 'missing',
+      keyDeleted: 'deleted',
+      keyAccounts: 'accounts',
+      keyModels: 'models',
+      pullAuto: 'auto pull',
+      pullManual: 'manual pull',
+      pullNow: 'pull now',
+      selectAll: 'all',
+      selectNone: 'none',
+      syncSelection: 'copy selection',
+      setMain: 'set main',
       requests: 'Requests',
       errors: 'Errors',
       tokens: 'Tokens',
@@ -515,6 +553,89 @@ window.__ModuleLoader__.load({
         return unsubscribe
       }, [])
       return store.get()
+    }
+
+    /**
+     * 「当前会话用的是哪个 provider」的小发布订阅。
+     *
+     * 侧边栏插槽本身只给 `wide`，拿不到会话；真正的来源是客户端的两个服务：
+     *   - `uiSession.current`：`getSnapshot().value.key` 是当前会话 id；
+     *   - `modelDirectories.directoryFor(sessionId)`：`getSnapshot().current.provider`
+     *     是当前会话选的 providerId（就是我们写进去的 routeKey），
+     *     `routable === false` 表示这个 provider/模型已经不在目录里了。
+     * 两个都快照、都订阅：切会话只换内存快照，**不发任何请求**。
+     */
+    const providerState = { value: '', routable: true, listeners: new Set() }
+
+    /** 写入当前 provider（值没变就不通知，避免 15 秒轮询把徽标刷成抖动）。 */
+    function setProviderState(next) {
+      const value = typeof next?.value === 'string' ? next.value : ''
+      const routable = next?.routable !== false
+      if (providerState.value === value && providerState.routable === routable) return
+      providerState.value = value
+      providerState.routable = routable
+      for (const listener of providerState.listeners) listener()
+    }
+
+    /** 读当前 provider 快照（纯函数，测试里可直接调）。 */
+    function providerSnapshot() {
+      return { value: providerState.value, routable: providerState.routable }
+    }
+
+    /** 组件里读当前 provider。 */
+    function useCurrentProvider() {
+      const [state, setState] = useState(providerSnapshot())
+      useEffect(() => {
+        const listener = () => setState(providerSnapshot())
+        providerState.listeners.add(listener)
+        return () => providerState.listeners.delete(listener)
+      }, [])
+      return state.value
+    }
+
+    /**
+     * 把 `uiSession` / `modelDirectories` 接上（宿主没有这两个服务时静默跳过）。
+     * @param ctx - 客户端上下文。
+     * @returns 解绑函数（拿不到服务时返回 undefined）。
+     */
+    function attachProviderSource(ctx) {
+      if (typeof ctx?.inject !== 'function') return undefined
+      return ctx.inject(['uiSession', 'modelDirectories'], (scope) => {
+        const uiSession = scope.uiSession
+        const directories = scope.modelDirectories
+        if (uiSession === undefined || directories === undefined) return undefined
+        let directory = null
+        let offDirectory = null
+        const publish = () => {
+          const snapshot = directory === null ? null : directory.getSnapshot()
+          setProviderState({
+            value: snapshot?.current?.provider ?? '',
+            routable: snapshot?.routable !== false,
+          })
+        }
+        const read = () => {
+          let sessionId = ''
+          try {
+            sessionId = uiSession.current?.getSnapshot?.()?.value?.key ?? ''
+          } catch {
+            sessionId = ''
+          }
+          const next = sessionId === '' || typeof directories.directoryFor !== 'function' ? null : directories.directoryFor(sessionId)
+          if (next !== directory) {
+            if (typeof offDirectory === 'function') offDirectory()
+            directory = next ?? null
+            offDirectory =
+              directory === null || typeof directory.subscribe !== 'function' ? null : directory.subscribe(() => publish())
+          }
+          publish()
+        }
+        const offSession = typeof uiSession.current?.subscribe === 'function' ? uiSession.current.subscribe(() => read()) : null
+        read()
+        return () => {
+          if (typeof offSession === 'function') offSession()
+          if (typeof offDirectory === 'function') offDirectory()
+        }
+      })
     }
 
     /** 按钮：优先用宿主的 primitives，拿不到就原生。 */
@@ -1027,6 +1148,86 @@ window.__ModuleLoader__.load({
             ),
       )
 
+      /* ------------------------------ Key 列表 ----------------------------- */
+      // 网关里每条 key 都是独立身份：自己的模型集、自己的勾选、自己的用量。
+      // 这里只做「开关与触发」，具体取舍都在宿主侧。
+      const keyRows = keyListOf(snapshot)
+      const keyCard = h(
+        'section',
+        { style: styles.card },
+        h(
+          'div',
+          { style: styles.row },
+          h('strong', null, t('keysTitle')),
+          h('span', { style: { ...styles.hint, marginLeft: 'auto' } }, `${keyRows.length} / ${snapshot?.maxKeys ?? 10}`),
+        ),
+        snapshot?.mainKeyMissing === true
+          ? h(
+              'div',
+              { style: { ...styles.banner('error'), display: 'flex', alignItems: 'center', gap: '8px' } },
+              h('span', null, t('footerMainDeleted')),
+              h('span', { style: styles.hint }, t('mainKeyDeletedHint')),
+            )
+          : null,
+        keyRows.length === 0
+          ? h('div', { style: styles.hint }, t('keysEmpty'))
+          : keyRows.map((key) =>
+              h(
+                'div',
+                {
+                  key: key.hubKeyId,
+                  style: {
+                    ...styles.row,
+                    alignItems: 'center',
+                    gap: '8px',
+                    flexWrap: 'wrap',
+                    borderTop: `1px solid ${palette.line}`,
+                    paddingTop: '6px',
+                    marginTop: '2px',
+                  },
+                },
+                h('span', { style: { color: key.missing === true ? palette.err : palette.text, fontWeight: 600 } }, key.name),
+                h('span', { style: { ...styles.mono, color: palette.muted, fontSize: '11px' } }, key.masked),
+                key.isMain === true ? h(Badge, null, t('keyMain')) : null,
+                key.missing === true ? h(Badge, null, key.deleted === true ? t('keyDeleted') : t('keyMissing')) : null,
+                h(
+                  'span',
+                  { style: styles.hint },
+                  `${t('keyAccounts')} ${key.accounts ?? 0} · ${t('keyModels')} ${key.counts?.enabled ?? 0}/${key.counts?.total ?? 0}`,
+                ),
+                h(
+                  'span',
+                  { style: { marginLeft: 'auto', display: 'flex', gap: '6px', flexWrap: 'wrap' } },
+                  h(
+                    Button,
+                    {
+                      onClick: () => post('keys/pull-mode', { hubKeyId: key.hubKeyId, pull: key.pull === 'auto' ? 'manual' : 'auto' }, 'pull'),
+                      disabled: busy !== '',
+                    },
+                    key.pull === 'auto' ? t('pullAuto') : t('pullManual'),
+                  ),
+                  h(Button, { onClick: () => post('keys/pull', { hubKeyId: key.hubKeyId }, 'pull'), disabled: busy !== '' }, t('pullNow')),
+                  h(Button, { onClick: () => post('bulk', { hubKeyId: key.hubKeyId, enabled: true }, 'bulk'), disabled: busy !== '' }, t('selectAll')),
+                  h(Button, { onClick: () => post('bulk', { hubKeyId: key.hubKeyId, enabled: false }, 'bulk'), disabled: busy !== '' }, t('selectNone')),
+                  h(
+                    Button,
+                    { onClick: () => post('keys/sync-selection', { from: key.hubKeyId }, 'sync'), disabled: busy !== '' },
+                    t('syncSelection'),
+                  ),
+                  key.isMain === true
+                    ? null
+                    : h(Button, { onClick: () => post('keys/main', { hubKeyId: key.hubKeyId }, 'main'), disabled: busy !== '' }, t('setMain')),
+                ),
+                key.lastError !== undefined && key.lastError !== ''
+                  ? h('span', { style: { color: palette.err, fontSize: '11px', flexBasis: '100%' } }, key.lastError)
+                  : null,
+                key.lastSyncError !== undefined && key.lastSyncError !== ''
+                  ? h('span', { style: { color: palette.warn, fontSize: '11px', flexBasis: '100%' } }, key.lastSyncError)
+                  : null,
+              ),
+            ),
+      )
+
       /* ------------------------------- 策略 -------------------------------- */
       const policyCard = h(
         'section',
@@ -1112,6 +1313,7 @@ window.__ModuleLoader__.load({
         connectionCard,
         overview,
         modelCard,
+        keyCard,
         policyCard,
       )
     }
@@ -1139,67 +1341,118 @@ window.__ModuleLoader__.load({
       return `¥${(Math.round(number * 100) / 100).toFixed(2)}`
     }
 
+    /** 快照里的 key 列表（老宿主没有 `keys` 时是空数组）。 */
+    function keyListOf(snapshot) {
+      return Array.isArray(snapshot?.keys) ? snapshot.keys : []
+    }
+
+    /** 按 providerId（= 我们写进 DSH 的 routeKey）找回那条 key。 */
+    function keyByProvider(snapshot, provider) {
+      if (typeof provider !== 'string' || provider === '') return null
+      return keyListOf(snapshot).find((key) => key?.routeKey === provider) ?? null
+    }
+
+    /** 主 key：徽标在没有「当前会话 key」时的落点。 */
+    function mainKeyOf(snapshot) {
+      return keyListOf(snapshot).find((key) => key?.isMain === true) ?? null
+    }
+
     /**
-     * 徽标上的四个数字（纯函数，便于测试）。
+     * 徽标第一行的两个余额。
      *
-     * 语义按 hub 的口径来：`balance.balance` 是账号池剩余积分；
-     * `usage.totalTokens` / `usage.credit` / `usage.costCny` 是
-     * **`/usage?range=` 窗口内**的用量——`credit` 是上游逐行给的，不是估的；
-     * `costCny` 才是按 OpenRouter 价折算的「API 等价花费」。
+     * `main` 是主 key 绑定账号在网关里还存着的积分之和（可能只有几百），
+     * `global` 是整个 realm 的额度（可能是几十万）——两个数量级不同的数字
+     * 放在一起必须带号数，否则看着像 bug。
      */
-    /**
-     * 把一份用量快照算成可读文本。
-     *
-     * @param snapshot - 宿主 `/state` 返回的快照。
-     * @param window - `today` 取 `usage`（主窗口），`week` 取 `usageWeek`。
-     */
-    function footerSummary(snapshot, window = 'today') {
-      const usage = (window === 'week' ? snapshot?.usageWeek : snapshot?.usage) ?? null
-      const hasBalance = snapshot?.balance !== null && snapshot?.balance !== undefined
+    function balanceLines(snapshot) {
+      const main = mainKeyOf(snapshot)
+      const detail = snapshot?.mainKeyBalance ?? null
+      const remain = Number(detail?.remain)
+      const global = snapshot?.balance ?? null
       return {
-        balance: hasBalance ? formatCredit(snapshot.balance.balance) : '—',
-        tokens: usage === null ? '—' : formatNumber(usage.totalTokens),
-        credit: usage === null ? '—' : formatCredit(usage.credit),
-        cost: usage === null ? '—' : formatCny(usage.costCny),
-        // 老宿主（< 1.0.3）没有 usageRange，那时拉的是不过滤的全量窗口，
-        // 所以缺省标 'all' 而不是 'today'——数字是什么就说什么。
-        range: normalizeRangeLabel(window === 'week' ? 'week' : snapshot?.usageRange),
+        main: main?.missing === true ? 'deleted' : Number.isFinite(remain) ? formatCredit(remain) : '—',
+        mainAccounts: Number(detail?.bound) || (Number.isFinite(Number(main?.accounts)) ? Number(main.accounts) : 0),
+        mainName: typeof main?.name === 'string' ? main.name : '',
+        global: global === null || global === undefined ? '—' : formatCredit(global.balance),
+        globalAccounts: Number(global?.accountsEnabled) || 0,
       }
     }
 
     /**
-     * 侧边栏底部的徽标：WorkBuddy · 积分余额 · 今日 tokens · 今日积分 · API 等价花费。
+     * 把一份用量快照算成可读文本。
      *
-     * 侧边栏展开时（`wide`）两行放全五项；收起时只留状态点 + 积分余额 +
-     * 今日积分，其余进 `title`（鼠标悬停可读，也方便复制）。
-     * 点一下打开 hub 看板——比让用户自己去找设置页再点按钮顺手。
+     * @param snapshot - 宿主 `/state` 返回的快照。
+     * @param window - `today` 取主窗口，`week` 取本周。
+     * @param key - 指定 key（徽标按当前会话的 key 取数）；缺省读全局槽位。
+     */
+    function footerSummary(snapshot, window = 'today', key = null) {
+      const perKey = window === 'week' ? snapshot?.usageWeekByKey : snapshot?.usageByKey
+      const scoped =
+        key !== null && key !== undefined && perKey !== null && typeof perKey === 'object'
+          ? perKey[key.hubKeyId] ?? null
+          : null
+      const usage = scoped ?? ((window === 'week' ? snapshot?.usageWeek : snapshot?.usage) ?? null)
+      const hasBalance = snapshot?.balance !== null && snapshot?.balance !== undefined
+      return {
+        balance: hasBalance ? formatCredit(snapshot.balance.balance) : '—',
+        tokens: usage === null || usage === undefined ? '—' : formatNumber(usage.totalTokens),
+        credit: usage === null || usage === undefined ? '—' : formatCredit(usage.credit),
+        cost: usage === null || usage === undefined ? '—' : formatCny(usage.costCny),
+        // 老宿主（< 1.0.3）没有 usageRange，那时拉的是不过滤的全量窗口，
+        // 所以缺省标 'all' 而不是 'today'——数字是什么就说什么。
+        range: normalizeRangeLabel(window === 'week' ? 'week' : snapshot?.usageRange),
+        scoped: scoped !== null && scoped !== undefined,
+        keyName: typeof key?.name === 'string' ? key.name : '',
+      }
+    }
+    /**
+     * 侧边栏底部徽标（三项：主 key 余额 + 全局 / 今日 / 本周）。
+     *
+     * 第二、三行跟着「当前会话用的那条 key」走：切会话自动切数字，
+     * 不需要额外请求（`/state` 里已经把每条 key 的用量一起带回来了）。
+     * 当前会话用的不是网关模型时，回落成主 key 的数据。
+     * 点一下打开 hub 看板——比让用户自己找设置页再点按钮顺手。
      */
     function HubFooter(props) {
       const t = props.t ?? ((key) => zh[key] ?? key)
       const { snapshot, error } = useStore()
       const [opening, setOpening] = useState(false)
+      const currentProvider = useCurrentProvider()
 
-      const summary = footerSummary(snapshot)
-      const week = footerSummary(snapshot, 'week')
+      const current = keyByProvider(snapshot, currentProvider) ?? mainKeyOf(snapshot)
+      const summary = footerSummary(snapshot, 'today', current)
+      const week = footerSummary(snapshot, 'week', current)
+      const balances = balanceLines(snapshot)
       // 老宿主（< 1.0.5）没有 usageWeek：这一行干脆不画，别拿今日的数冒充本周。
-      const hasWeek = snapshot?.usageWeek !== null && snapshot?.usageWeek !== undefined
-      const rangeKey = summary.range === 'today' ? 'rangeToday' : summary.range === 'week' ? 'rangeWeek' : summary.range === 'month' ? 'rangeMonth' : 'rangeAll'
+      const hasWeek =
+        current !== null && current !== undefined
+          ? current.usageWeek !== null && current.usageWeek !== undefined
+          : snapshot?.usageWeek !== null && snapshot?.usageWeek !== undefined
+      const rangeKey =
+        summary.range === 'today' ? 'rangeToday' : summary.range === 'week' ? 'rangeWeek' : summary.range === 'month' ? 'rangeMonth' : 'rangeAll'
       const tone = error !== '' || snapshot === null ? palette.faint : snapshot.health?.ok === true ? palette.ok : palette.err
+      const keys = keyListOf(snapshot)
+      // 当前会话选的 provider 是我们写进去的，但模型已经不在目录里了：
+      // 这是「主 key 被删」或「这条 key 的模型全被取消勾选」，只能让用户重选。
+      const stale = currentProvider !== '' && keyByProvider(snapshot, currentProvider) !== null && providerState.routable === false
 
-      /**
-       * 一行用量：`今日 tokens 72.3M · 积分 61.41 · API 等价 ¥10.39`。
-       *
-       * 主窗口和本周共用同一个格式函数。早先主窗口拆成三行、本周挤成一行，
-       * 悬停框里两块长得不一样，读起来像两份不同的数据；现在两行同构，
-       * 只有开头的窗口名不同。
-       */
+      /** 一行用量：`今日 tokens 72.3M · 积分 61.41 · API 等价 ¥10.39`。 */
       const usageLine = (label, item) =>
         `${label} ${t('tokensUnit')} ${item.tokens} · ${t('creditUnit')} ${item.credit} · ${t('footerApiCost')} ${item.cost}`
 
+      const mainBalanceText = balances.main === 'deleted' ? t('footerMainDeleted') : balances.main
+
       const title = [
-        `${t('footerLabel')} · ${t('footerBalance')} ${summary.balance}`,
-        usageLine(t(rangeKey), summary),
+        `${t('footerLabel')} · ${t('mainKeyBalance')} ${mainBalanceText}${balances.mainAccounts > 0 ? `（${balances.mainAccounts} 号）` : ''}`,
+        `${t('footerBalance')} ${balances.global}${balances.globalAccounts > 0 ? `（${balances.globalAccounts} 号）` : ''}`,
+        current === null ? usageLine(t(rangeKey), summary) : usageLine(`${t(rangeKey)} · ${current.name}`, summary),
         hasWeek ? usageLine(t('rangeWeek'), week) : '',
+        stale ? t('reselectHint') : '',
+        keys.length > 1 ? t('footerAllKeys') : '',
+        ...keys.map(
+          (key) =>
+            `${key.hubKeyId === current?.hubKeyId ? '●' : '○'} ${key.name} · ${t('creditUnit')} ${formatCredit(key.usage?.credit ?? 0)} / ${formatNumber(key.usage?.totalTokens ?? 0)}`,
+        ),
         error !== '' ? error : snapshot?.baseUrl ?? '',
       ]
         .filter((line) => line !== '')
@@ -1266,12 +1519,14 @@ window.__ModuleLoader__.load({
               textAlign: 'left',
             },
           },
+          // 第一行：主 key 余额 + 全局余额（全局那个更小更淡，是背景信息）。
           h(
             'span',
-            { style: { display: 'flex', alignItems: 'center', gap: '6px' } },
+            { style: { display: 'flex', alignItems: 'baseline', gap: '6px' } },
             h('span', { style: styles.dot(tone === palette.ok) }),
             h('span', { style: { color: palette.text, fontWeight: 600 } }, t('footerLabel')),
-            h('span', { style: { marginLeft: 'auto', ...styles.mono, color: palette.text } }, summary.balance),
+            h('span', { style: { marginLeft: 'auto', ...styles.mono, color: palette.text } }, mainBalanceText),
+            h('span', { style: { ...styles.mono, color: palette.muted, fontSize: '10px' } }, `/ ${balances.global}`),
           ),
           // 第二、三行：窗口名贴左（两行左边缘对齐），三个数字贴右（右边缘也对齐）。
           usageRow(t(rangeKey), summary),
@@ -1297,12 +1552,11 @@ window.__ModuleLoader__.load({
           },
         },
         h('span', { style: styles.dot(tone === palette.ok) }),
-        // 收起态只有 ~48px：余额 + 今日积分各一行，其余看 title。
-        h('span', { style: { fontSize: '11px', color: palette.text, ...styles.mono } }, summary.balance),
+        // 收起态只有 ~48px：主 key 余额 + 今日积分各一行，其余看 title。
+        h('span', { style: { fontSize: '11px', color: palette.text, ...styles.mono } }, balances.main === 'deleted' ? '!' : balances.main),
         h('span', { style: { fontSize: '9px', color: palette.muted, ...styles.mono } }, summary.credit),
       )
     }
-
     /* ------------------------------- 插件入口 ---------------------------- */
 
     /**
@@ -1323,6 +1577,9 @@ window.__ModuleLoader__.load({
       const t = ctx.locale.bind(NS)
 
       ctx.effect(() => ctx.locale.register(NS, { zh, en }), `${NS}: dictionaries`)
+
+      // 侧边栏插槽拿不到会话，只能从客户端服务里读当前 provider（拿不到就静默跳过）。
+      safeEffect(ctx, 'provider-source', () => attachProviderSource(ctx))
 
       safeEffect(ctx, 'settings.section', () =>
         ctx.slots.inject('settings.section', () =>
@@ -1370,6 +1627,13 @@ window.__ModuleLoader__.load({
     exports.__HubFooter = HubFooter
     exports.__sortRowsByName = sortRowsByName
     exports.__footerSummary = footerSummary
+    exports.__keyListOf = keyListOf
+    exports.__keyByProvider = keyByProvider
+    exports.__mainKeyOf = mainKeyOf
+    exports.__balanceLines = balanceLines
+    exports.__providerSnapshot = providerSnapshot
+    exports.__setProviderState = setProviderState
+    exports.__attachProviderSource = attachProviderSource
     return module.exports
   },
 })

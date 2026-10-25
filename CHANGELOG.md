@@ -2,6 +2,35 @@
 
 本项目遵循 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/) 与语义化版本。
 
+## [1.1.0] - 2026-10-25
+
+从「一条 key」扩到「网关里有几条 key 就同步几条」，每条 key 各自一条 provider 路由、一条凭据。
+
+- **一 key ↔ 一条路由 ↔ 一条凭据**。主 key 冻结为 `workbuddy2api-hub` / `WORKBUDDY2API_HUB_API_KEY`
+  （已有会话、`agent-default-model`、`allowedModels` 都指向它，改了就断）；其余 key 用
+  `workbuddy2api-hub-<名字>` / `WORKBUDDY2API_HUB_API_KEY_<名字>`。路由键建好就不再变，
+  所以改网关里的 key 名字、换倍率都不会让会话里选中的模型消失。
+- **拉取策略**：主 key 常驻自动；其余 key 默认 `manual`，只有点「立即拉取」才去问网关，
+  新发现的 key 当轮拉一次（否则界面上是一片空白）。`maxKeys` 默认 10，超出的只读不写。
+- **勾选按 key 独立**，新模型默认全选；新增「把这条 key 的勾选同步给别的 key」
+  （只覆盖双方都有的模型，目标 key 独有的模型保留它自己的勾选）。
+- **侧边栏徽标改三行**：第一行「主 key 余额 + 整域余额」（余额没法按 key 拆，网关的
+  `/v1/balance-summary` 是整域汇总，所以用 key 绑定的账号余额之和），第二三行是今日 /
+  本周的 `tokens · 积分 · API 等价花费`，并且**跟着当前会话用的那条 key 走**——
+  直接读 `uiSession` + `modelDirectories` 的快照，切会话不发任何请求。悬停列出全部 key，
+  `●` 标当前。
+- **主 key 被删**（网关里没了）：撤掉主路由、`state.mainKeyMissing = true`、徽标第一行
+  显示「主 key 已删除」、会话里的模型不可用时提示重新选择——**不拿别的 key 顶替**。
+  告警里单独出一条「主 key 已不在网关里」，不会混进同步失败的文案。
+- 用量按 key 拆开来自 `/usage/analytics`（`/usage` 没有 key 参数，传了也被忽略）；
+  合成桶（`__no_key__` / `__unknown_key__`）不算任何 key。
+- 设置页新增「Key 列表」卡片：名字 / 掩码 / 绑定账号数 / 启用模型数 / 拉取方式切换 /
+  立即拉取 / 全选全不选 / 同步勾选 / 设为主 key，每条 key 的错误就显示在自己那一行。
+- 新接口：`POST /keys/pull`、`/keys/pull-mode`、`/keys/selection`、`/keys/sync-selection`、
+  `/keys/main`；`/selection`、`/bulk`、`/enable-new`、`/retire`、`/refresh` 支持 `hubKeyId`。
+- 升级迁移：老状态文件的 `selection` / `lastModelIds` / `retired` 会被整条搬进「主 key」，
+  顶层字段继续写（= 主 key 镜像），回滚到 1.0.12 行为不变、已有会话不断。
+
 ## [1.0.12] - 2026-10-24
 
 「打开看板」不再默认把面板密码塞进 URL。

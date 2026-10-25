@@ -14,7 +14,11 @@ import {
   DEFAULT_PWD,
   DEFAULT_TAB,
   DSH_THINKING_LEVELS,
+  MAIN_API_KEY_ENV,
+  MAIN_ROUTE_KEY,
   TABS,
+  allocateRouteKey,
+  apiKeyEnvFor,
   buildDashboardUrl,
   buildRouteModels,
   canonicalJson,
@@ -22,6 +26,11 @@ import {
   classifyFailure,
   compareModelsByName,
   computeAlerts,
+  copySelection,
+  isSyntheticUsageRow,
+  keyRowsOf,
+  keySlug,
+  mainKeyBalance,
   modelDisplayName,
   modelLabel,
   modelRateSuffix,
@@ -29,9 +38,14 @@ import {
   modelRate,
   modelReasoningEfforts,
   normalizeBaseUrl,
+  normalizeHubKeyRow,
+  normalizePullMode,
   normalizePwd,
   normalizeTab,
   normalizeUsageRange,
+  pickKeyUsage,
+  seedSelection,
+  summarizeAnalyticsWindow,
   usageQuery,
   USAGE_RANGES,
   pickBaseUrl,
@@ -674,4 +688,158 @@ test('pickBaseUrl', () => {
   assert.equal(pickBaseUrl([]), DEFAULT_BASE_URL)
   assert.equal(pickBaseUrl(null), DEFAULT_BASE_URL)
   assert.equal(pickBaseUrl(['', 'http://x']), 'http://x')
+})
+
+/* ------------------------------ 多 key ------------------------------ */
+
+test('keySlug / allocateRouteKey / apiKeyEnvFor：一 key 一路由一凭据', () => {
+  assert.equal(keySlug('bendi'), 'bendi')
+  assert.equal(keySlug('Pool-CN'), 'pool-cn')
+  assert.equal(keySlug('  a  b  '), 'a-b', '连续符号折叠成一个连字符')
+  assert.equal(keySlug('中文名字', 'abcd1234ef'), 'abcd1234', '中文名用 id 前 8 位兜底，不能拼出空 slug')
+  assert.equal(keySlug('', ''), 'key')
+
+  // 主 key 恒定，不跟着名字走——否则改个名就把会话里的模型搞没了。
+  assert.equal(allocateRouteKey('bendi', 'bendi0001', [], true), MAIN_ROUTE_KEY)
+  assert.equal(allocateRouteKey('Pool CN', 'poolcn001'), 'workbuddy2api-hub-pool-cn')
+  // 撞名：先加 id 前 4 位，再撞加序号。
+  assert.equal(
+    allocateRouteKey('pool-cn', 'abcd9999', ['workbuddy2api-hub-pool-cn']),
+    'workbuddy2api-hub-pool-cn-abcd',
+  )
+  assert.equal(
+    allocateRouteKey('pool-cn', 'abcd9999', ['workbuddy2api-hub-pool-cn', 'workbuddy2api-hub-pool-cn-abcd']),
+    'workbuddy2api-hub-pool-cn-abcd-2',
+  )
+
+  assert.equal(apiKeyEnvFor(MAIN_ROUTE_KEY), MAIN_API_KEY_ENV)
+  assert.equal(apiKeyEnvFor('workbuddy2api-hub-pool-cn'), 'WORKBUDDY2API_HUB_API_KEY_POOL_CN')
+  assert.equal(apiKeyEnvFor('workbuddy2api-hub-x'), 'WORKBUDDY2API_HUB_API_KEY_X')
+})
+
+test('normalizePullMode / normalizeHubKeyRow / keyRowsOf', () => {
+  assert.equal(normalizePullMode('AUTO'), 'auto')
+  assert.equal(normalizePullMode(' manual '), 'manual')
+  assert.equal(normalizePullMode('nope'), 'manual', '默认 manual：多 key 下别自动把网关打爆')
+  assert.equal(normalizePullMode(undefined, 'auto'), 'auto')
+  assert.equal(normalizePullMode('nope', 'nope'), 'manual', '兜底值非法时退回 manual')
+
+  assert.equal(normalizeHubKeyRow(null), null)
+  assert.equal(normalizeHubKeyRow({ name: 'x' }), null, '没有 id 的行直接丢掉')
+  const row = normalizeHubKeyRow({
+    id: ' bendi0001 ',
+    name: ' bendi ',
+    masked: 'bend******0001',
+    enabled: false,
+    accounts: ['a', 'b', 3],
+    models: ['hy3'],
+  })
+  assert.equal(row.hubKeyId, 'bendi0001')
+  assert.equal(row.name, 'bendi')
+  assert.equal(row.enabled, false, 'enabled:false 才是关，缺字段算开')
+  assert.deepEqual(row.accounts, ['a', 'b'], '非字符串的账号 id 滤掉')
+  assert.deepEqual(row.models, ['hy3'])
+  assert.equal(normalizeHubKeyRow({ id: 'x' }).name, 'key-x', '没名字时用 id 兜底')
+
+  const rows = keyRowsOf({ api_keys: [{ id: 'a', name: 'A' }, { name: 'no-id' }, null] })
+  assert.deepEqual(rows.map((item) => item.hubKeyId), ['a'])
+  assert.deepEqual(keyRowsOf(null), [])
+  assert.deepEqual(keyRowsOf({}), [])
+})
+
+test('mainKeyBalance：主 key 余额 = 它绑定的账号之和', () => {
+  const accounts = {
+    accounts: [
+      { uid: 'u1', enabled: true, credits: { remain: 1347.33 } },
+      { uid: 'u2', enabled: true, credits: { remain: 88.5 } },
+      { uid: 'u3', enabled: false, credits: { remain: 999 } },
+      { uid: 'u4', enabled: true },
+    ],
+  }
+  const sum = mainKeyBalance(accounts, ['u1', 'u2'])
+  assert.equal(sum.remain, 1435.83)
+  assert.equal(sum.bound, 2)
+  assert.equal(sum.found, 2)
+  assert.equal(sum.enabled, 2)
+  assert.equal(sum.missing, 0)
+
+  // 绑了两个号但只找到一个：missing 要如实算，界面才好提示。
+  const partial = mainKeyBalance(accounts, ['u1', 'gone'])
+  assert.equal(partial.remain, 1347.33)
+  assert.equal(partial.missing, 1)
+
+  // 绑了但账号被停用：不算进余额。
+  assert.equal(mainKeyBalance(accounts, ['u3']).remain, null)
+  // 没绑号：remain 是 null 而不是 0（0 是「真没余额」）。
+  assert.equal(mainKeyBalance(accounts, []).remain, null)
+  // 缺数据不炸。
+  assert.equal(mainKeyBalance(null, ['u1']).remain, null)
+  assert.equal(mainKeyBalance({ accounts: 'nope' }, ['u1']).found, 0)
+})
+
+test('pickKeyUsage / isSyntheticUsageRow / summarizeAnalyticsWindow', () => {
+  const rows = [
+    {
+      key: 'bendi0001',
+      name: 'bendi',
+      source: 'panel',
+      window: { requests: 92, errors: 2, total_tokens: 8884081, credit: 12.66, cost_cny: 1.4595 },
+      all_time: { requests: 2815, total_tokens: 150000000, credit: 300.5 },
+      models: ['hy3', 'hy4-preview'],
+    },
+    { key: '__no_key__', name: '(无 key)', source: 'bucket', window: { requests: 5 } },
+    { key: 'x', name: 'x', source: 'bucket', window: { requests: 1 } },
+  ]
+  assert.equal(isSyntheticUsageRow(rows[1]), true)
+  assert.equal(isSyntheticUsageRow(rows[2]), true, 'source 不是 panel 的一律不算')
+  assert.equal(isSyntheticUsageRow(rows[0]), false)
+  assert.equal(isSyntheticUsageRow({ key: '', source: 'panel' }), true)
+  assert.equal(isSyntheticUsageRow(null), true)
+
+  const usage = pickKeyUsage(rows, 'bendi0001')
+  assert.equal(usage.requests, 92)
+  assert.equal(usage.errorRate, 2.2)
+  assert.equal(usage.totalTokens, 8884081)
+  assert.equal(usage.credit, 12.66)
+  assert.equal(usage.models, 2, '窗口里没有 models 计数就用 models 数组长度')
+  assert.equal(usage.lifetime.requests, 2815)
+  assert.equal(pickKeyUsage(rows, '__no_key__'), null, '合成桶永远取不到')
+  assert.equal(pickKeyUsage(rows, 'nope'), null)
+  assert.equal(pickKeyUsage(rows, ''), null)
+  assert.equal(pickKeyUsage(null, 'bendi0001'), null)
+
+  assert.deepEqual(summarizeAnalyticsWindow({ window: { since: 'a', until: 'b' }, realm: 'all' }), {
+    since: 'a',
+    until: 'b',
+    realm: 'all',
+  })
+  assert.deepEqual(summarizeAnalyticsWindow(null), { since: '', until: '', realm: '' })
+})
+
+test('seedSelection / copySelection：默认全选，同步只给两边都有的模型', () => {
+  const seeded = seedSelection([{ id: 'hy3' }, { id: 'glm-5.3-flash' }], {})
+  assert.deepEqual(seeded, { hy3: { enabled: true }, 'glm-5.3-flash': { enabled: true } })
+
+  // 用户手动取消勾选过的，不能被「默认全选」又勾回来。
+  const kept = seedSelection([{ id: 'hy3' }, { id: 'new-one' }], { hy3: { enabled: false, efforts: { high: 'high' } } })
+  assert.deepEqual(kept.hy3, { enabled: false, efforts: { high: 'high' } })
+  assert.deepEqual(kept['new-one'], { enabled: true })
+  assert.deepEqual(seedSelection(null, null), {})
+  assert.deepEqual(seedSelection([{ id: '' }, {}, null], {}), {}, '没 id 的模型跳过')
+
+  const copied = copySelection({ hy3: { enabled: false }, 'glm-5.3-flash': { enabled: true } }, [
+    { id: 'hy3' },
+    { id: 'deepseek-v4.1-flash' },
+  ])
+  assert.deepEqual(copied, { hy3: { enabled: false }, 'deepseek-v4.1-flash': { enabled: true } }, '目标 key 没有的模型按默认全选')
+  // 目标 key 独有的模型：保留它自己以前的勾选，不能被同步悄悄勾回来。
+  const keptOwn = copySelection({ hy3: { enabled: false } }, [{ id: 'hy3' }, { id: 'deepseek-v4.1-flash' }], {
+    'deepseek-v4.1-flash': { enabled: false, efforts: { high: 'high' } },
+  })
+  assert.deepEqual(keptOwn, {
+    hy3: { enabled: false },
+    'deepseek-v4.1-flash': { enabled: false, efforts: { high: 'high' } },
+  })
+  assert.deepEqual(copySelection(null, [{ id: 'hy3' }]), { hy3: { enabled: true } })
+  assert.deepEqual(copySelection(null, null), {})
 })

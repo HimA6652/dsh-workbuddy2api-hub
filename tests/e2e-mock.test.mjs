@@ -73,12 +73,15 @@ describe('主链路：登录 → 读接口 → 写 llm-pi-ai 配置', () => {
     await runtime.start()
     try {
       assert.equal(ctx.__credentials.get('WORKBUDDY2API_HUB_API_KEY'), 'mock-api-key-0001')
-      const state = runtime.state
-      const text = JSON.stringify(state)
+      const text = JSON.stringify(runtime.state)
       assert.equal(text.includes('mock-api-key-0001'), false, '明文 Key 绝不能落进状态对象')
       // 面板密码是另一回事：用户在设置页改过之后重启还得在，所以要持久化。
-      // 真正的要求是「密码不冒充 API Key」——credentials 里只有那一把 Key。
-      assert.deepEqual([...ctx.__credentials.keys()], ['WORKBUDDY2API_HUB_API_KEY'])
+      // 真正的要求是「密码不冒充 API Key」——credentials 里只有这些 Key 的引用名。
+      assert.deepEqual(
+        [...ctx.__credentials.keys()].sort(),
+        ['WORKBUDDY2API_HUB_API_KEY', 'WORKBUDDY2API_HUB_API_KEY_OTHERS', 'WORKBUDDY2API_HUB_API_KEY_POOL_CN'],
+        '一条 key 一条凭据，引用名按 key 名派生',
+      )
     } finally {
       ctx.__dispose()
     }
@@ -114,8 +117,20 @@ describe('主链路：登录 → 读接口 → 写 llm-pi-ai 配置', () => {
       assert.equal(flash.reasoningEfforts, false, '不支持思考的模型明确写 false')
       assert.equal('input' in flash, false)
 
-      assert.equal(runtime.snapshot().lastSyncCount, 3)
+      assert.equal(runtime.snapshot().lastSyncCount, 7, '三条 key 的模型数相加：3 + 3 + 1')
       assert.ok(runtime.snapshot().lastSyncAt > 0)
+
+      // 一条 key 一条路由：多 key 的意义就在这，勾选/模型集互不干扰。
+      const routes = entry.value.providers
+      assert.deepEqual(Object.keys(routes).sort(), [
+        DEFAULT_ROUTE_KEY,
+        `${DEFAULT_ROUTE_KEY}-others`,
+        `${DEFAULT_ROUTE_KEY}-pool-cn`,
+      ])
+      const pool = routes[`${DEFAULT_ROUTE_KEY}-pool-cn`]
+      assert.equal(pool.apiKeyEnv, 'WORKBUDDY2API_HUB_API_KEY_POOL_CN')
+      assert.equal(pool.displayName, 'pool-cn', '选择器里显示网关给 key 起的名字')
+      assert.deepEqual(pool.models.map((model) => model.id), ['hy3'], 'pool-cn 在网关侧只被允许看 hy3')
     } finally {
       ctx.__dispose()
     }
@@ -131,7 +146,7 @@ describe('主链路：登录 → 读接口 → 写 llm-pi-ai 配置', () => {
       const result = await runtime.refresh({ sync: true })
       assert.equal(result.ok, true)
       assert.equal(ctx.__mutations.length, before, '内容相同不该再写一次')
-      assert.equal(runtime.snapshot().lastSyncCount, 3)
+      assert.equal(runtime.snapshot().lastSyncCount, 7)
     } finally {
       ctx.__dispose()
     }
@@ -466,6 +481,177 @@ describe('插件 HTTP 接口', () => {
   })
 })
 
+describe('多 key：一 key 一条路由一条凭据', () => {
+  let server
+  let base
+
+  before(async () => {
+    ;({ server, base } = await startMockHub())
+  })
+  after(async () => {
+    await stopMockHub(server)
+  })
+
+  test('发现网关里的三条 key：主 key 冻结，其余默认 manual 但当轮拉一次', async () => {
+    const ctx = await makeCtx()
+    const runtime = new HubRuntime(ctx, { baseUrl: base })
+    await runtime.start()
+    try {
+      const snapshot = runtime.snapshot()
+      assert.equal(snapshot.keys.length, 3, '网关里有三条 key')
+      const [bendi, others, pool] = snapshot.keys
+
+      // 主 key：标识冻结，名字改了也不会动路由键（否则会话里的模型会消失）
+      assert.equal(bendi.name, 'bendi')
+      assert.equal(bendi.isMain, true)
+      assert.equal(bendi.routeKey, DEFAULT_ROUTE_KEY)
+      assert.equal(bendi.apiKeyEnv, 'WORKBUDDY2API_HUB_API_KEY')
+      assert.equal(bendi.pull, 'auto', '主 key 常驻自动拉')
+
+      assert.equal(others.pull, 'manual', '其余 key 默认手动，别每轮都去打网关')
+      assert.equal(others.routeKey, 'workbuddy2api-hub-others')
+      assert.equal(others.apiKeyEnv, 'WORKBUDDY2API_HUB_API_KEY_OTHERS')
+      assert.equal(pool.apiKeyEnv, 'WORKBUDDY2API_HUB_API_KEY_POOL_CN')
+      // mock 里 pool-cn 只能看到 hy3 → 证明模型集是按 key 各自拉的
+      assert.deepEqual(pool.models.map((row) => row.id), ['hy3'])
+      assert.ok(pool.pulledAt > 0, '新发现的 key 当轮要拉一次，否则设置页一片空白')
+
+      // 用量按 key 拆：bendi 今日 92 次、pool-cn 只有 6 次
+      assert.equal(bendi.usage.requests, 92)
+      assert.equal(pool.usage.requests, 6)
+      // 主 key 余额 = 它绑的两个账号之和（1347.33 + 88.5），与全局余额不是一回事
+      assert.equal(snapshot.mainKeyBalance.remain, 1435.83)
+      assert.equal(snapshot.mainKeyBalance.bound, 2)
+
+      // 三条路由各写一条，模型数 3 + 3 + 1
+      const providers = ctx.__entries.find((row) => row.ns === 'llm-pi-ai').value.providers
+      assert.deepEqual(Object.keys(providers).sort(), [
+        'workbuddy2api-hub',
+        'workbuddy2api-hub-others',
+        'workbuddy2api-hub-pool-cn',
+      ])
+      assert.equal(providers['workbuddy2api-hub-others'].displayName, 'others')
+    } finally {
+      ctx.__dispose()
+    }
+  })
+
+  test('POST /keys/pull-mode 改拉取方式，POST /keys/pull 立刻拉一次', async () => {
+    const ctx = await makeCtx()
+    const runtime = new HubRuntime(ctx, { baseUrl: base })
+    await runtime.start()
+    try {
+      let result = await expectCall(runtime, {
+        method: 'POST',
+        url: '/workbuddy2api-hub/api/keys/pull-mode',
+        body: { hubKeyId: 'others001', pull: 'auto' },
+      })
+      assert.equal(result.status, 200)
+      assert.equal(result.body.keys.find((key) => key.hubKeyId === 'others001').pull, 'auto')
+
+      result = await expectCall(runtime, {
+        method: 'POST',
+        url: '/workbuddy2api-hub/api/keys/pull',
+        body: { hubKeyId: 'poolcn001' },
+      })
+      assert.equal(result.status, 200)
+      assert.equal(result.body.result.ok, true)
+      const pool = result.body.keys.find((key) => key.hubKeyId === 'poolcn001')
+      assert.deepEqual(pool.models.map((row) => row.id), ['hy3'])
+    } finally {
+      ctx.__dispose()
+    }
+  })
+
+  test('POST /keys/selection 只改那一条 key 的勾选，主 key 不受影响', async () => {
+    const ctx = await makeCtx()
+    const runtime = new HubRuntime(ctx, { baseUrl: base })
+    await runtime.start()
+    try {
+      const result = await expectCall(runtime, {
+        method: 'POST',
+        url: '/workbuddy2api-hub/api/keys/selection',
+        body: { hubKeyId: 'others001', id: 'hy3', enabled: false },
+      })
+      assert.equal(result.status, 200)
+      const others = result.body.keys.find((key) => key.hubKeyId === 'others001')
+      const main = result.body.keys.find((key) => key.hubKeyId === 'bendi0001')
+      assert.equal(others.counts.enabled, 2, 'others 剩两个模型')
+      assert.equal(main.counts.enabled, 3, '主 key 的勾选不受影响')
+      const providers = ctx.__entries.find((row) => row.ns === 'llm-pi-ai').value.providers
+      assert.equal(providers['workbuddy2api-hub-others'].models.length, 2)
+      assert.equal(providers[DEFAULT_ROUTE_KEY].models.length, 3)
+    } finally {
+      ctx.__dispose()
+    }
+  })
+
+  test('POST /keys/sync-selection 把一条 key 的勾选复制到别的 key', async () => {
+    const ctx = await makeCtx()
+    const runtime = new HubRuntime(ctx, { baseUrl: base })
+    await runtime.start()
+    try {
+      // 先把主 key 的 hy3 取消，再同步给 others：两边的 hy3 都该是关的
+      await runtime.run(() => runtime.select('hy3', { enabled: false }))
+      const result = await expectCall(runtime, {
+        method: 'POST',
+        url: '/workbuddy2api-hub/api/keys/sync-selection',
+        body: { from: 'bendi0001', to: ['others001'] },
+      })
+      assert.equal(result.status, 200)
+      assert.equal(result.body.copied, 1)
+      const others = result.body.keys.find((key) => key.hubKeyId === 'others001')
+      const hy3 = others.models.find((row) => row.id === 'hy3')
+      assert.equal(hy3.enabled, false, '双方都有的模型按源的勾选走')
+    } finally {
+      ctx.__dispose()
+    }
+  })
+
+  test('POST /keys/main 指定不存在的 key → 404，不乱改主 key', async () => {
+    const ctx = await makeCtx()
+    const runtime = new HubRuntime(ctx, { baseUrl: base })
+    await runtime.start()
+    try {
+      const result = await expectCall(runtime, {
+        method: 'POST',
+        url: '/workbuddy2api-hub/api/keys/main',
+        body: { hubKeyId: 'nope' },
+      })
+      assert.equal(result.status, 404)
+      assert.match(result.body.error, /没有这条 key/)
+      assert.equal(runtime.snapshot().mainKeyId, 'bendi0001')
+    } finally {
+      ctx.__dispose()
+    }
+  })
+
+  test('主 key 在网关被删：标记 mainKeyMissing、删掉主路由，别的 key 照旧', async () => {
+    const ctx = await makeCtx()
+    const runtime = new HubRuntime(ctx, { baseUrl: base })
+    await runtime.start()
+    try {
+      const response = await fetch(`${base}/mock/keys?del=bendi0001`)
+      assert.equal(response.status, 200)
+
+      await runtime.run(() => runtime.refresh({ sync: true }))
+      const snapshot = runtime.snapshot()
+      assert.equal(snapshot.mainKeyMissing, true, '徽标要能显示「主 key 已删除」')
+      assert.equal(snapshot.counts.total, 0, '主 key 没了，顶层不再冒充还有模型')
+      // 别的 key 还在同步，所以 lastSyncError 是空的——这事得靠告警说清楚。
+      assert.ok(snapshot.alerts.some((alert) => alert.key === 'main-key-missing'), '要出「主 key 已不在网关里」告警')
+
+      const providers = ctx.__entries.find((row) => row.ns === 'llm-pi-ai').value.providers
+      assert.equal(providers[DEFAULT_ROUTE_KEY], undefined, '主路由必须删掉，不能拿别的 key 顶替')
+      assert.ok(providers['workbuddy2api-hub-others'], '其它 key 的路由不受影响')
+
+      await fetch(`${base}/mock/reset`)
+    } finally {
+      ctx.__dispose()
+    }
+  })
+})
+
 describe('失败路径：连不上 / 密码错 / 被限流 / 没 Key', () => {
   test('连不上 hub：报明确提示，不抛异常', async () => {
     const ctx = await makeCtx()
@@ -567,8 +753,8 @@ describe('失败路径：连不上 / 密码错 / 被限流 / 没 Key', () => {
     const runtime = new HubRuntime(ctx, { baseUrl: base })
     await runtime.start()
     try {
-      await runtime.run(() => runtime.configure({ apiKey: 'typed-by-user' }))
-      assert.equal(ctx.__credentials.get('WORKBUDDY2API_HUB_API_KEY'), 'typed-by-user')
+      await runtime.run(() => runtime.configure({ apiKey: 'mock-api-key-0001' }))
+      assert.equal(ctx.__credentials.get('WORKBUDDY2API_HUB_API_KEY'), 'mock-api-key-0001')
       assert.equal(runtime.apiKeySource, 'credentials')
       const result = await runtime.run(() => runtime.refresh({ sync: true }))
       assert.equal(result.ok, true)

@@ -397,6 +397,52 @@ describe('模型表排序', () => {
   })
 })
 
+/**
+ * 多 key 快照：徽标的所有数字都从这里来。
+ *
+ * 两条 key（主 key `bendi` + `pool-cn`），三个窗口的用量都给全，
+ * 免得某条断言其实读到的是全局兜底值。
+ */
+function multiSnapshot() {
+  const bendiToday = { totalTokens: 72300000, credit: 61.41, costCny: 10.39 }
+  const bendiWeek = { totalTokens: 260700000, credit: 465.43, costCny: 31.17 }
+  const poolToday = { totalTokens: 213, credit: 0, costCny: 0 }
+  const poolWeek = { totalTokens: 639, credit: 0, costCny: 0 }
+  return {
+    baseUrl: 'http://127.0.0.1:8788',
+    health: { ok: true },
+    balance: { balance: 3731.61, accountsEnabled: 190 },
+    mainKeyBalance: { remain: 1435.83, bound: 2, found: 2, enabled: 2, missing: 0 },
+    mainKeyId: 'bendi0001',
+    mainKeyMissing: false,
+    keys: [
+      {
+        hubKeyId: 'bendi0001',
+        name: 'bendi',
+        routeKey: 'workbuddy2api-hub',
+        isMain: true,
+        accounts: 2,
+        usage: bendiToday,
+        usageWeek: bendiWeek,
+      },
+      {
+        hubKeyId: 'poolcn001',
+        name: 'pool-cn',
+        routeKey: 'workbuddy2api-hub-pool-cn',
+        isMain: false,
+        accounts: 2,
+        usage: poolToday,
+        usageWeek: poolWeek,
+      },
+    ],
+    usageByKey: { bendi0001: bendiToday, poolcn001: poolToday },
+    usageWeekByKey: { bendi0001: bendiWeek, poolcn001: poolWeek },
+    usage: bendiToday,
+    usageWeek: bendiWeek,
+    usageRange: 'today',
+  }
+}
+
 describe('侧边栏徽标：五项数字', () => {
   test('footerSummary 把余额/今日 tokens/今日积分/API 等价算成可读文本', async () => {
     const { exports } = await loadClient()
@@ -415,7 +461,10 @@ describe('侧边栏徽标：五项数字', () => {
   test('快照还没到 / 字段缺失时不抛错，显示占位符', async () => {
     const { exports } = await loadClient()
     const empty = exports.__footerSummary(null)
-    assert.deepEqual({ ...empty }, { balance: '—', tokens: '—', credit: '—', cost: '—', range: 'all' })
+    assert.deepEqual(
+      { ...empty },
+      { balance: '—', tokens: '—', credit: '—', cost: '—', range: 'all', scoped: false, keyName: '' },
+    )
 
     const noUsage = exports.__footerSummary({ balance: { balance: 0 } })
     assert.equal(noUsage.balance, '0.00', '余额 0 是有效值，不能当缺失')
@@ -457,28 +506,23 @@ describe('侧边栏徽标：五项数字', () => {
     const zh = exports.__dicts.zh
     const t = (key) => zh[key] ?? key
 
-    exports.__store.set({
-      baseUrl: 'http://127.0.0.1:8788',
-      health: { ok: true },
-      balance: { balance: 3731.61 },
-      usage: { totalTokens: 49942298, credit: 45.57, costCny: 7.21 },
-      usageWeek: { totalTokens: 119260000, credit: 118.44, costCny: 17.88 },
-      usageRange: 'today',
-    })
+    // 当前会话用的是主 key 的路由，所以第二、三行取主 key 的用量。
+    exports.__setProviderState({ value: 'workbuddy2api-hub', routable: true })
+    exports.__store.set(multiSnapshot())
 
     const tree = exports.__HubFooter({ t, wide: true })
     assert.equal(tree.type, 'button')
     const [row1, rowToday, rowWeek] = tree.children
 
-    // 第一行：状态点 + WorkBuddy + 积分余额
+    // 第一行：状态点 + WorkBuddy + 主 key 余额 + 全局（更淡的那个）
     const head = row1.children.map((node) => (typeof node === 'string' ? node : node.children.join('')))
-    assert.deepEqual(head, ['', 'WorkBuddy', '3731.61'])
+    assert.deepEqual(head, ['', 'WorkBuddy', '1435.83', '/ 3731.61'], '主 key 余额在前，全局只是背景')
 
     // 每个数据行 = [左标签, 右侧数字组]，数字组里是「值 · 值 · 值」
     const flatten = (node) => (typeof node === 'string' ? node : node.children.map(flatten).flat(Infinity))
     for (const [row, label, expected] of [
-      [rowToday, '今日', ['49.9M', '·', '45.57', '·', '¥7.21']],
-      [rowWeek, '本周', ['119.3M', '·', '118.44', '·', '¥17.88']],
+      [rowToday, '今日', ['72.3M', '·', '61.41', '·', '¥10.39']],
+      [rowWeek, '本周', ['260.7M', '·', '465.43', '·', '¥31.17']],
     ]) {
       const [left, right] = row.children
       assert.deepEqual(flatten(left), [label], '窗口名贴左')
@@ -489,32 +533,62 @@ describe('侧边栏徽标：五项数字', () => {
     }
   })
 
-  test('悬停框里今日与本周格式统一', async () => {
+  test('切到别的 key 的会话：今日/本周改用那条 key 的数，不用主 key 的', async () => {
     const { exports } = await loadClient()
     const t = (key) => exports.__dicts.zh[key] ?? key
-    exports.__store.set({
-      baseUrl: 'http://127.0.0.1:8788',
-      health: { ok: true },
-      balance: { balance: 3715.39 },
-      usage: { totalTokens: 72300000, credit: 61.41, costCny: 10.39 },
-      usageWeek: { totalTokens: 260700000, credit: 465.43, costCny: 31.17 },
-      usageRange: 'today',
-    })
+    exports.__setProviderState({ value: 'workbuddy2api-hub-pool-cn', routable: true })
+    exports.__store.set(multiSnapshot())
+    const flatten = (node) => (typeof node === 'string' ? node : node.children.map(flatten).flat(Infinity))
+    const tree = exports.__HubFooter({ t, wide: true })
+    assert.deepEqual(flatten(tree.children[1].children[1]), ['213', '·', '0.00', '·', '¥0.00'])
+    assert.deepEqual(flatten(tree.children[2].children[1]), ['639', '·', '0.00', '·', '¥0.00'])
+    // 第一行的余额不跟着会话走：余额是按「主 key 绑定的账号」算的，与当前会话无关。
+    const head = tree.children[0].children.map((node) => (typeof node === 'string' ? node : node.children.join('')))
+    assert.equal(head[2], '1435.83')
+  })
+
+  test('悬停框里今日与本周格式统一、并列出全部 key', async () => {
+    const { exports } = await loadClient()
+    const zh = exports.__dicts.zh
+    const t = (key) => zh[key] ?? key
+    exports.__setProviderState({ value: 'workbuddy2api-hub', routable: true })
+    exports.__store.set(multiSnapshot())
     const lines = exports.__HubFooter({ t, wide: true }).props.title.split('\n')
     assert.deepEqual(lines, [
-      'WorkBuddy · 积分余额 3715.39',
-      '今日 tokens 72.3M · 积分 61.41 · API 等价 ¥10.39',
-      '本周 tokens 260.7M · 积分 465.43 · API 等价 ¥31.17',
+      `${t('footerLabel')} · ${t('mainKeyBalance')} 1435.83（2 号）`,
+      `${t('footerBalance')} 3731.61（190 号）`,
+      `今日 · bendi ${t('tokensUnit')} 72.3M · ${t('creditUnit')} 61.41 · ${t('footerApiCost')} ¥10.39`,
+      `本周 ${t('tokensUnit')} 260.7M · ${t('creditUnit')} 465.43 · ${t('footerApiCost')} ¥31.17`,
+      t('footerAllKeys'),
+      `● bendi · ${t('creditUnit')} 61.41 / 72.3M`,
+      `○ pool-cn · ${t('creditUnit')} 0.00 / 213`,
       'http://127.0.0.1:8788',
     ])
-    // 同构：把窗口名换成占位、把数字换成占位，两行必须一字不差
+    // 同构：把窗口名与 key 名换成占位、把数字换成占位，两行必须一字不差
+    const stripKey = (line) => line.replace(/ · \S+ tokens/, ' tokens')
     const shape = (line) => line.replace(/^(今日|本周)/, '<窗口>').replace(/[0-9][0-9.]*[KMB]?/g, '<数>')
-    assert.equal(shape(lines[1]), shape(lines[2]))
-    assert.equal(shape(lines[1]), '<窗口> tokens <数> · 积分 <数> · API 等价 ¥<数>')
-    // 收起态共用同一个 title，不该有两套文案
-    exports.__store.set({ balance: { balance: 1 }, usage: { totalTokens: 1, credit: 1, costCny: 1 }, usageRange: 'today' })
-    const narrow = exports.__HubFooter({ t, wide: false }).props.title.split('\n')
-    assert.equal(narrow[1], '今日 tokens 1 · 积分 1.00 · API 等价 ¥1.00')
+    assert.equal(shape(stripKey(lines[2])), shape(lines[3]))
+    assert.equal(shape(lines[3]), '<窗口> tokens <数> · 积分 <数> · API 等价 ¥<数>')
+  })
+
+  test('主 key 被删：第一行明说已删除，并提示重新选模型', async () => {
+    const { exports } = await loadClient()
+    const zh = exports.__dicts.zh
+    const t = (key) => zh[key] ?? key
+    const snapshot = multiSnapshot()
+    snapshot.mainKeyMissing = true
+    snapshot.mainKeyBalance = { remain: null, bound: 2, found: 0, enabled: 0, missing: 2 }
+    snapshot.keys[0].missing = true
+    exports.__setProviderState({ value: 'workbuddy2api-hub', routable: false })
+    exports.__store.set(snapshot)
+    const tree = exports.__HubFooter({ t, wide: true })
+    const head = tree.children[0].children.map((node) => (typeof node === 'string' ? node : node.children.join('')))
+    assert.equal(head[2], zh.footerMainDeleted, '不能拿 0 或 — 冒充余额')
+    const lines = tree.props.title.split('\n')
+    assert.ok(lines.includes(zh.reselectHint), '会话里的模型已经不在目录里，要提示重选')
+    // 收起态也得看得出「坏了」，不然 ~48px 里只剩一个 0
+    const narrow = exports.__HubFooter({ t, wide: false })
+    assert.equal([].concat(narrow.children[1].children).join(''), '!')
   })
 
   test('没有 usageWeek 的老宿主不画第三行，也不拿今日数冒充本周', async () => {

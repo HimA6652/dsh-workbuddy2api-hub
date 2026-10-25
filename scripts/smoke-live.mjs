@@ -10,14 +10,18 @@
  *
  * 用法：
  *   node scripts/smoke-live.mjs
- *   node scripts/smoke-live.mjs --url http://127.0.0.1:8788 --pwd admin
+ *   node scripts/smoke-live.mjs --url http://127.0.0.1:8788 --pwd <面板密码>
+ *   node scripts/smoke-live.mjs --state ~/.dsh/profiles/desktop/workbuddy2api-hub.json
+ *
+ * 不给 `--pwd` 时会从插件的状态文件里读（插件设置页里改过的密码就存在那儿），
+ * 因为面板密码一旦改过就不再是默认的 `admin`。
  *   node scripts/smoke-live.mjs --json
  *
  * 退出码：0 一切正常 / 2 连不上 / 3 密码不对或没有权限 / 4 其它（含超时）。
  */
 
-import { mkdtemp, rm } from 'node:fs/promises'
-import { tmpdir } from 'node:os'
+import { mkdtemp, readFile, rm } from 'node:fs/promises'
+import { homedir, tmpdir } from 'node:os'
 import { join } from 'node:path'
 
 import { apply, constants } from '../lib/index.js'
@@ -34,6 +38,8 @@ function parseArgs(argv) {
     tab: constants.DEFAULT_TAB,
     json: false,
     waitMs: 15000,
+    pwdSource: 'default',
+    statePath: '',
   }
   for (let index = 0; index < argv.length; index += 1) {
     const arg = argv[index]
@@ -47,6 +53,10 @@ function parseArgs(argv) {
       index += 1
     } else if (arg === '--pwd' || arg === '--password') {
       options.pwd = value
+      options.pwdSource = 'arg'
+      index += 1
+    } else if (arg === '--state') {
+      options.statePath = value
       index += 1
     } else if (arg === '--tab') {
       options.tab = value
@@ -155,12 +165,42 @@ function line(label, value) {
 }
 
 /** 主流程。 */
+/**
+ * 从插件的状态文件里读面板密码：密码改过之后就不再是默认的 `admin` 了。
+ * @param options - 命令行选项。
+ * @returns 是否读到了密码（密码本身不打印）。
+ */
+async function loadStatePwd(options) {
+  if (options.pwdSource === 'arg') return false
+  const profile = process.env.DSH_PROFILE || 'desktop'
+  const candidates = [
+    options.statePath,
+    join(homedir(), '.dsh', 'profiles', profile, 'workbuddy2api-hub.json'),
+  ].filter((item) => typeof item === 'string' && item !== '')
+  for (const path of candidates) {
+    try {
+      const parsed = JSON.parse(await readFile(path, 'utf8'))
+      const pwd = typeof parsed?.pwd === 'string' ? parsed.pwd : ''
+      if (pwd !== '') {
+        options.pwd = pwd
+        options.pwdSource = 'state'
+        return true
+      }
+    } catch {
+      // 没装过插件就没有状态文件，用默认密码继续试。
+    }
+  }
+  return false
+}
 async function main() {
   const options = parseArgs(process.argv.slice(2))
   if (options.help) {
-    console.log('用法：node scripts/smoke-live.mjs [--url http://127.0.0.1:8788] [--pwd admin] [--tab gateway] [--json] [--wait 15000]')
+    console.log('用法：node scripts/smoke-live.mjs [--url http://127.0.0.1:8788] [--pwd <面板密码>] [--state <状态文件>] [--tab gateway] [--json] [--wait 15000]')
     return 0
   }
+
+  // 密码改过之后就不再是 admin 了；从插件状态文件里取，省得每次手动传。
+  await loadStatePwd(options)
 
   const stateDir = await mkdtemp(join(tmpdir(), 'wb-hub-smoke-'))
   const { ctx, routes, disposers } = makeReadOnlyCtx()
@@ -196,6 +236,15 @@ async function main() {
         enabled: model.enabled,
       })),
       counts: state?.counts ?? { total: 0, enabled: 0, retired: 0 },
+      keys: (state?.keys ?? []).map((key) => ({
+        name: key.name,
+        isMain: key.isMain === true,
+        pull: key.pull,
+        accounts: key.accounts,
+        models: key.counts?.total ?? 0,
+        missing: key.missing === true,
+      })),
+      mainKeyBalance: state?.mainKeyBalance ?? null,
       balance: state?.balance ?? null,
       usage: state?.usage ?? null,
       usageWeek: state?.usageWeek ?? null,
@@ -217,10 +266,22 @@ async function main() {
       if (report.usingDefaultPassword) console.log(line('提醒', '面板还在用默认密码 admin，建议改掉'))
       console.log(line('API Key', report.apiKeyReady ? `就绪（来源：${report.apiKeySource}）` : '缺失（/v1 会 401）'))
       console.log(line('模型', `${report.counts.total} 个（启用 ${report.counts.enabled}，宽限 ${report.counts.retired}）`))
+      if (Array.isArray(report.keys) && report.keys.length > 0) {
+        const names = report.keys.map((key) => `${key.name}${key.isMain ? '(主)' : ''}`).join(' / ')
+        console.log(line('网关 key', `${report.keys.length} 条：${names}（只读体检不取明文，所以模型按面板会话读）`))
+      }
       for (const model of report.models) {
         const details = [model.contextWindow ? `${model.contextWindow} ctx` : 'ctx 未知', model.rate].filter((part) => part !== '')
         if (model.efforts.length > 0) details.push(model.efforts.join('/'))
         console.log(`  - ${model.id}（${details.join('，')}）`)
+      }
+      if (report.mainKeyBalance !== null && report.mainKeyBalance?.remain !== null) {
+        console.log(
+          line(
+            '主 key 余额',
+            `${report.mainKeyBalance.remain} credit（绑了 ${report.mainKeyBalance.bound} 个号，找到 ${report.mainKeyBalance.found} 个）`,
+          ),
+        )
       }
       if (report.balance !== null) {
         console.log(line('余额', `${report.balance.balance} ${report.balance.unit}`.trim()))

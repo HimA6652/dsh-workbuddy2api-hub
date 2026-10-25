@@ -121,6 +121,60 @@ function weekStartStamp() {
 }
 
 /**
+ * 网关里的三条 API Key。
+ *
+ * 真实 hub 的 api_keys[] 每行都带 accounts（绑定的上游账号 id 列表），
+ * 主 key 余额就是按这份列表去 /accounts 里挑账号累加出来的。
+ */
+function initialKeys(config) {
+  return [
+    {
+      id: 'bendi0001',
+      name: 'bendi',
+      masked: 'bend******0001',
+      accounts: ['mock-uid-1', 'mock-uid-2'],
+      secret: config.apiKey,
+      enabled: true,
+      source: 'panel',
+    },
+    {
+      id: 'others001',
+      name: 'others',
+      masked: 'othe******0001',
+      accounts: ['mock-uid-3'],
+      secret: 'mock-api-key-others',
+      enabled: true,
+      source: 'panel',
+    },
+    {
+      id: 'poolcn001',
+      name: 'pool-cn',
+      masked: 'pool******0001',
+      accounts: ['mock-uid-4', 'mock-uid-5'],
+      secret: 'mock-api-key-pool',
+      enabled: true,
+      source: 'panel',
+    },
+  ]
+}
+
+/** 一条 key 在不同窗口下的用量（/usage/analytics 用）。 */
+const KEY_USAGE = {
+  bendi0001: {
+    today: { requests: 92, errors: 2, total_tokens: 8884081, credit: 12.66, cost_cny: 1.4595 },
+    all_time: { requests: 2815, total_tokens: 150000000, credit: 300.5, cost_cny: 34.2 },
+  },
+  others001: {
+    today: { requests: 0, errors: 0, total_tokens: 0, credit: 0, cost_cny: 0 },
+    all_time: { requests: 647, total_tokens: 41000000, credit: 62.4, cost_cny: 7.1 },
+  },
+  poolcn001: {
+    today: { requests: 6, errors: 0, total_tokens: 213, credit: 0, cost_cny: 0 },
+    all_time: { requests: 6, total_tokens: 213, credit: 0, cost_cny: 0 },
+  },
+}
+
+/**
  * 起一个 HTTP 服务。
  * @param options - {@link parseArgs} 的结果。
  * @returns node http server。
@@ -133,6 +187,10 @@ export function createMockHub(options = {}) {
     balance: 3712.57,
     /** 面板 Token → 签发时间。 */
     tokens: new Map(),
+    /** 网关里的 key 表（真实 hub 的 /settings.api_keys）。 */
+    keys: initialKeys(config),
+    /** 被删掉的 key id（真实 hub 的 /settings.deleted_api_keys）。 */
+    deletedKeys: [],
     /** 失败登录时间戳，用来模拟 5 次/60 秒的限流。 */
     failures: [],
   }
@@ -193,6 +251,8 @@ async function handle(request, response, config, state) {
     send(response, 200, {
       models: state.models.map((model) => model.id),
       apiKeyPresent: state.apiKeyPresent,
+      keys: state.keys.map((key) => key.name),
+      deletedKeys: [...state.deletedKeys],
       balance: state.balance,
       tokens: state.tokens.size,
     })
@@ -201,6 +261,8 @@ async function handle(request, response, config, state) {
   if (path === '/mock/reset') {
     state.models = config.empty === true ? [] : modelList()
     state.apiKeyPresent = config.noApiKey !== true
+    state.keys = initialKeys(config)
+    state.deletedKeys.length = 0
     state.balance = 3712.57
     state.tokens.clear()
     state.failures.length = 0
@@ -236,8 +298,39 @@ async function handle(request, response, config, state) {
     return
   }
   if (path === '/mock/keys') {
-    state.apiKeyPresent = url.searchParams.get('present') !== '0'
-    send(response, 200, { ok: true, present: state.apiKeyPresent })
+    if (url.searchParams.has('present')) {
+      state.apiKeyPresent = url.searchParams.get('present') !== '0'
+    }
+    const del = url.searchParams.get('del')
+    if (del !== null && del !== '') {
+      // 网关里删掉一把 key：它从 api_keys 消失，id 进 deleted_api_keys。
+      state.keys = state.keys.filter((key) => key.id !== del)
+      if (!state.deletedKeys.includes(del)) state.deletedKeys.push(del)
+    }
+    const add = url.searchParams.get('add')
+    if (add !== null && add !== '') {
+      const id = 'added' + String(state.keys.length + 1).padStart(4, '0')
+      state.keys.push({
+        id,
+        name: add,
+        masked: add.slice(0, 4) + '******0001',
+        accounts: ['mock-uid-1'],
+        secret: 'mock-api-key-' + add,
+        enabled: url.searchParams.get('enabled') !== '0',
+        source: 'panel',
+      })
+    }
+    const disable = url.searchParams.get('disable')
+    if (disable !== null && disable !== '') {
+      const target = state.keys.find((key) => key.id === disable)
+      if (target !== undefined) target.enabled = false
+    }
+    send(response, 200, {
+      ok: true,
+      present: state.apiKeyPresent,
+      keys: state.keys.map((key) => ({ id: key.id, name: key.name, enabled: key.enabled })),
+      deletedKeys: [...state.deletedKeys],
+    })
     return
   }
 
@@ -312,14 +405,21 @@ async function handle(request, response, config, state) {
    */
   const requireAccess = () => {
     if (authenticated) return true
+    // 网关里存在的 key 都能过；config.apiKey 也算（模拟「面板不列 key，但 key 确实存在」）。
     if (bearer !== '' && bearer === config.apiKey) return true
+    if (bearer !== '' && state.keys.some((key) => key.secret === bearer && key.enabled !== false)) {
+      return true
+    }
     send(response, 401, { ok: false, error: 'panel password required' })
     return false
   }
 
   if (path === '/v1/models') {
     if (!requireAccess()) return
-    send(response, 200, { object: 'list', data: state.models })
+    // pool-cn 只看得到 hy3：per-key 模型集是这次多 key 的核心差异，得能测出来。
+    const scoped = state.keys.find((key) => key.secret === bearer)
+    const list = scoped?.id === 'poolcn001' ? state.models.filter((m) => m.id === 'hy3') : state.models
+    send(response, 200, { object: 'list', data: list })
     return
   }
 
@@ -343,6 +443,68 @@ async function handle(request, response, config, state) {
       object: 'chat.completion',
       choices: [{ index: 0, message: { role: 'assistant', content: 'pong' }, finish_reason: 'stop' }],
       usage: { prompt_tokens: 1, completion_tokens: 1, total_tokens: 2 },
+    })
+    return
+  }
+
+  if (path === '/usage/analytics') {
+    if (!requireAccess()) return
+    const range = String(url.searchParams.get('range') ?? '').trim().toLowerCase()
+    const week = range === 'week' || range === 'w'
+    const month = range === 'month' || range === 'm'
+    const scale = week ? 3 : month ? 12 : 1
+    const scaleOf = (cell) => ({
+      requests: cell.requests * scale,
+      errors: cell.errors * scale,
+      total_tokens: cell.total_tokens * scale,
+      credit: Math.round(cell.credit * scale * 100) / 100,
+      cost_cny: Math.round(cell.cost_cny * scale * 10000) / 10000,
+    })
+    const zero = { requests: 0, errors: 0, total_tokens: 0, credit: 0, cost_cny: 0 }
+    const rows = state.keys.map((key) => ({
+      key: key.id,
+      name: key.name,
+      realm: '',
+      enabled: key.enabled,
+      source: 'panel',
+      window: scaleOf(KEY_USAGE[key.id]?.today ?? zero),
+      all_time: { ...(KEY_USAGE[key.id]?.all_time ?? zero) },
+      window_models: { 'hy4-preview': 1 },
+      all_models: { 'hy4-preview': 1 },
+      realms: ['cn'],
+      last_at: Date.now() / 1000,
+      models: ['hy4-preview', 'hy3'],
+      models_other: 0,
+      cross_realm: false,
+    }))
+    // 合成桶：真实 hub 里没带 key 的请求会落到这几行，插件必须把它们过滤掉。
+    rows.push({
+      key: '__no_key__',
+      name: '(无 key)',
+      realm: '',
+      enabled: true,
+      source: 'bucket',
+      window: { requests: 5 * scale, errors: 0, total_tokens: 100, credit: 0, cost_cny: 0 },
+      all_time: { requests: 5, total_tokens: 100, credit: 0, cost_cny: 0 },
+      window_models: {},
+      all_models: {},
+      realms: ['cn'],
+      last_at: Date.now() / 1000,
+      models: [],
+      models_other: 0,
+      cross_realm: false,
+    })
+    send(response, 200, {
+      window: {
+        since: week ? weekStartStamp() : new Date().toISOString().slice(0, 10) + ' 00:00:00',
+        until: null,
+      },
+      realm: 'all',
+      usd_cny: 7.1,
+      keys: rows,
+      summary: {},
+      accounts: { total: 2, enabled: 2 },
+      models: ['hy4-preview', 'hy3'],
     })
     return
   }
@@ -438,18 +600,21 @@ async function handle(request, response, config, state) {
     send(response, 200, {
       panel_password_is_default: config.password === 'admin',
       api_key_set: state.apiKeyPresent,
-      api_keys: state.apiKeyPresent
-        ? [
-            {
-              id: 'mockkey01',
-              name: 'local',
-              masked: 'mock******0001',
-              enabled: true,
-              source: 'panel',
+      api_keys:
+        state.apiKeyPresent === true
+          ? state.keys.map((key) => ({
+              id: key.id,
+              name: key.name,
+              masked: key.masked,
+              realm: '',
+              models: [],
+              accounts: key.accounts,
+              enabled: key.enabled,
+              source: key.source,
               created_at: '2026/10/19 11:49',
-            },
-          ]
-        : [],
+            }))
+          : [],
+      deleted_api_keys: [...state.deletedKeys],
       limits: {},
     })
     return
@@ -458,11 +623,13 @@ async function handle(request, response, config, state) {
   if (path === '/settings/reveal') {
     if (!requireAccess()) return
     const id = url.searchParams.get('id') ?? ''
-    if (id === '' || state.apiKeyPresent !== true) {
+    const found =
+      state.apiKeyPresent === true ? state.keys.find((key) => key.id === id) : undefined
+    if (found === undefined) {
       send(response, 404, { error: 'no such key' })
       return
     }
-    send(response, 200, { id, key: config.apiKey })
+    send(response, 200, { id: found.id, key: found.secret })
     return
   }
 
