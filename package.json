@@ -1,6 +1,6 @@
 {
   "name": "dsh-workbuddy2api-hub",
-  "version": "1.2.1",
+  "version": "1.2.2",
   "description": "workbuddy2api-hub 集成：接入本地 hub 面板，同步模型（配额/上下文/思考档位）、实时额度与用量，支持服务地址与 pwd 配置",
   "type": "module",
   "main": "lib/index.js",
