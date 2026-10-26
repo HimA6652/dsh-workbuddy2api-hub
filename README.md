@@ -246,7 +246,7 @@ npm run check                           # 发布前自查
 
 改 UI 时注意：颜色一律用 DSH 注册的主题令牌 `--dsw-alias-*`（`label-primary`、`label-secondary`、`bg-layer-1/2`、`border-l1/l2`、`brand-primary`、`state-*`），不要写死色值——否则深色主题能看、浅色主题就成了「浅灰字压白底」。在哪能看到当前有哪些令牌：DSH 里打开开发者工具，看 `:root` 上的 CSS 变量。`tests/client.test.mjs` 里有测试盯着这件事。
 
-调试出口、主题令牌清单、假 hub 复刻的鉴权语义、刷新退避规则、发版流程、市场收录模板都在 [docs/MAINTAINER.md](docs/MAINTAINER.md) —— README 这里只留使用者需要知道的部分。那份文档只在仓库里，不随 npm 包发出去。
+调试出口、主题令牌清单、假 hub 复刻的鉴权语义、刷新退避规则、发版流程、市场收录模板都在 [docs/MAINTAINER.md](https://github.com/HimA6652/dsh-workbuddy2api-hub/blob/main/docs/MAINTAINER.md) —— README 这里只留使用者需要知道的部分。那份文档只在仓库里，不随 npm 包发出去。
 
 ### 与上游的关系
 

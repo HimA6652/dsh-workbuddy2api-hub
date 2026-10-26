@@ -1,7 +1,7 @@
 # Changelog
 
 按 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/) 组织，版本号跟 `package.json` 走。
-每条只写**用户能感知的行为变化**和**会咬人的坑**；实现细节在 [docs/MAINTAINER.md](docs/MAINTAINER.md)。
+每条只写**用户能感知的行为变化**和**会咬人的坑**；实现细节在 [docs/MAINTAINER.md](https://github.com/HimA6652/dsh-workbuddy2api-hub/blob/main/docs/MAINTAINER.md)。
 
 ## [1.2.2] - 2026-10-25
 
