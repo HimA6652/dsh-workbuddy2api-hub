@@ -747,6 +747,26 @@ describe('侧边栏徽标：三行数字', () => {
     assert.equal(exports.__syncedModelCount(null), 0)
   })
 
+  test('同步行末尾显示网关版本；拿不到就画破折号', async () => {
+    const { exports } = await loadClient()
+    const t = (key) => exports.__dicts.zh[key] ?? key
+    // 同步行是「已同步 … · 路由键 … · 插件 … · 网关 …」那一串小字，
+    // 断言整行文字，比钉死第几个子节点抗改。
+    const flattenText = (node) => {
+      if (typeof node === 'string') return node
+      if (node === null || node === undefined) return ''
+      if (Array.isArray(node)) return node.map(flattenText).join('')
+      return (node.children ?? []).map(flattenText).join('')
+    }
+    const render = (version) => {
+      // 同步行只在 lastSyncAt > 0 时渲染，夹具默认没给，这里补一个。
+      exports.__store.set({ ...multiSnapshot(), lastSyncAt: 1_700_000_000_000, health: { ok: true, version } })
+      return flattenText(exports.__HubPanel({ t }))
+    }
+    assert.ok(render('1.8.0').includes('网关 1.8.0'), '接的是哪一版要能看见')
+    assert.ok(render('').includes('网关 —'), '拿不到版本就画破折号，别留空')
+  })
+
   test('版本与 API Key 来源：中文口径跟网关一致（cn=国内版 / intl=国际版）', async () => {
     const { exports } = await loadClient()
     const zh = exports.__dicts.zh

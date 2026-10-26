@@ -10,6 +10,7 @@ import assert from 'node:assert/strict'
 import { test } from 'node:test'
 
 import {
+  ACCOUNTS_SOFT_LIMIT,
   DEFAULT_BASE_URL,
   DEFAULT_PWD,
   DEFAULT_TAB,
@@ -27,6 +28,7 @@ import {
   compareModelsByName,
   computeAlerts,
   copySelection,
+  hubVersionFromServer,
   isSyntheticUsageRow,
   keyRowsOf,
   keySlug,
@@ -417,6 +419,24 @@ test('summarizeHealth / summarizePanelStatus / summarizeBalance', () => {
   )
   assert.equal(summarizeHealth(null), null)
   assert.equal(summarizeHealth({ ok: false }).ok, false)
+  // 版本：`/health` 的响应体从 1.7.x 到 1.8.x 都没有 version 字段，
+  // 真实值只在响应头 `Server: wb-proxy/1.8.0 Python/3.13.14` 里。
+  assert.equal(hubVersionFromServer('wb-proxy/1.8.0 Python/3.13.14'), '1.8.0')
+  assert.equal(hubVersionFromServer('wb-proxy/1.7.33'), '1.7.33')
+  assert.equal(hubVersionFromServer('nginx/1.25'), '', '不是 wb-proxy 的头就不猜')
+  assert.equal(hubVersionFromServer(''), '')
+  assert.equal(hubVersionFromServer(undefined), '')
+  assert.equal(
+    summarizeHealth({ ok: true }, { server: 'wb-proxy/1.8.0 Python/3.13.14' }).version,
+    '1.8.0',
+    '响应体没给版本就用响应头补',
+  )
+  assert.equal(
+    summarizeHealth({ ok: true, version: '9.9.9' }, { server: 'wb-proxy/1.8.0' }).version,
+    '9.9.9',
+    '响应体给了就听响应体的',
+  )
+  assert.equal(summarizeHealth({ ok: true }).version, '', '两个都没有才是空串')
 
   assert.deepEqual(
     summarizePanelStatus({
@@ -638,6 +658,17 @@ test('computeAlerts：四类告警 + 已读抑制', () => {
   assert.deepEqual(
     accounts.map((alert) => alert.key),
     ['relogin', 'expired', 'expiring'],
+  )
+
+  // `/accounts` 没有分页，条数到容量线就说一声——这是容量提示，不是错误。
+  const many = computeAlerts({ accounts: { total: ACCOUNTS_SOFT_LIMIT } })
+  assert.equal(many[0].key, 'accounts-large')
+  assert.equal(many[0].level, 'warning')
+  assert.ok(many[0].detail.includes(String(ACCOUNTS_SOFT_LIMIT)), '提示里要说清提示线是多少')
+  assert.deepEqual(
+    computeAlerts({ accounts: { total: ACCOUNTS_SOFT_LIMIT - 1 } }),
+    [],
+    '没到线就别提',
   )
 
   // 关掉的告警 24 小时内不再出现。

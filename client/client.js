@@ -138,6 +138,7 @@ window.__ModuleLoader__.load({
       pwdDefault: 'hub 仍在使用默认密码',
       pendingSync: '同步被宿主事务推迟，下一次刷新会补做',
       pluginVersion: '插件',
+      hubVersion: '网关',
       routeKey: '路由键',
       modelsEnabled: '已启用',
       avgRate: '平均倍率',
@@ -261,6 +262,7 @@ window.__ModuleLoader__.load({
       pwdDefault: 'hub still uses the default password',
       pendingSync: 'Sync was deferred by a host transaction; the next refresh retries',
       pluginVersion: 'Plugin',
+      hubVersion: 'Gateway',
       routeKey: 'Route key',
       modelsEnabled: 'enabled',
       avgRate: 'Average rate',
@@ -1255,6 +1257,7 @@ window.__ModuleLoader__.load({
                     h('span', { style: styles.hint }, `${t('synced')} ${timeAgo(snapshot.lastSyncAt, t)} · ${syncedModelCount(snapshot)}/${snapshot.counts?.total ?? snapshot.lastSyncCount} ${t('models')}`),
                     h('span', { style: styles.hint }, `${t('routeKey')}: ${snapshot.routeKey}`),
                     h('span', { style: styles.hint }, `${t('pluginVersion')} ${snapshot.pluginVersion}`),
+                    h('span', { style: styles.hint }, `${t('hubVersion')} ${snapshot.health?.version || '—'}`),
                   )
                 : null,
             )

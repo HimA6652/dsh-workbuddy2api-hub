@@ -11,7 +11,7 @@
 
 | | |
 | --- | --- |
-| 适用 workbuddy2api-hub | 1.x（实测 v1.7.x）。依赖的接口在「依赖的面板接口」一节 |
+| 适用 workbuddy2api-hub | 1.x（实测 v1.8.x）。依赖的接口在「依赖的面板接口」一节 |
 | 适用 DSH | 桌面端 profile。`@deepseek-ai/*` 全部是 `peerDependencies`，由 DSH 自己提供，不随包安装 |
 | 与本项目的关系 | 客户端插件。只读 hub 的管理接口和 `/v1/models`，不调任何写入接口 |
 | 运行时依赖 | 无。没有打包步骤，`client/client.js` 就是可直接加载的 `__ModuleLoader__` bundle |
