@@ -96,6 +96,36 @@ cordis_inspect_query platform=client provider=Slots method=listSubTree
 - 前端每 15 秒读一次插件 `/state`（`ETag` + `If-None-Match`，304 就复用上一份），标签页在后台（`document.hidden`）时跳过。
 - 徽标是「缓存视图」：最旧数据 = `intervalSeconds` + 15 秒。要秒级实时就点开面板，它自己 5 秒刷一次。
 
+## commit 与版本文案
+
+一句话：写**做了什么**，不写为什么。
+
+**commit message** 用 `type(scope): 一句话`，50–70 字符，不带句号，一行只讲一件事。同一件事
+涉及十个文件也还是一件；真是两件事就分两次提交。
+
+```
+feat: 多 key 支持（1.1.0）
+fix(ci): 测试命令改成 node --test，兼容 Node 20/22
+fix(client): 关掉设置页再打开时停在「连接中…」
+fix(release): 工作树干净时跳过提交
+chore(release): v1.2.2
+```
+
+- `type` 取 `feat` / `fix` / `perf` / `docs` / `chore` / `refactor`；`scope` 是本仓库的模块名
+  （`client` / `lib` / `ci` / `release` / `docs`），没有明确模块就省掉。发布提交固定
+  `chore(release): vX.Y.Z`。
+- **不写因果从句**。「不再因为没东西可提交把标签带走」是解释，不是描述；描述是「工作树干净时
+  跳过提交」。解释放进 CHANGELOG 正文或本文件。
+- **不在一行里塞多件事**。「徽标改弹窗 + 模型并进 key + 删掉拉取开关」应该只留最大那件，
+  其余进 CHANGELOG。
+- 中文项目写中文，英文项目写英文，不混。
+
+**CHANGELOG** 每条 bullet 只写用户能感知的行为变化：症状用粗体开头，原因和实测数字跟在后面，
+实现细节（CSS 属性、函数名、行号）留在本文件。每段结尾补一句「升上来要不要动东西」。
+
+**README** 只写使用者需要的：这是什么、装、怎么用、配置、出错什么样、有哪些限制。
+设计取舍、宿主内部机制、调试手法都在本文件，不往 README 里放。
+
 ## 发版
 
 ```bash
