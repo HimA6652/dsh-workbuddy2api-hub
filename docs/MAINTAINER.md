@@ -22,8 +22,7 @@ bundle 末尾挂了一串 `exports.__*`，只为测试和手工排查用，宿�
 | `__keyFoldOpen` | 折叠默认值：没点过按 `isMain`（主 key 摊开、其余收起），点过照表里记录 |
 | `__realmText` / `__apiKeySourceText` | 概览两格的中文口径（`cn` → 国内版、`credentials` → 凭据库…），值抄的是网关界面自己的叫法 |
 | `__syncedModelCount` | 同步行那个分子：遍历 `keys[].models` 按 `id` 收进 `Set`，取**所有 key 启用模型的并集**。`enabled:false` 与 `retired:true` 不算；拿不到 `models` 才回落 `snapshot.lastSyncCount`。**别改回 `lastSyncCount`**——那是 `syncRoutesToDsh()` 里 `count += routeModels.length` 逐条累加，同一条模型被几条 key 勾上会重复计 |
-| `__keyListOf` / `__keyByProvider` / `__mainKeyOf` / `__balanceLines` | key 列表、按 providerId 找 key、主 key、余额行的取值函数 |
-| `__providerSnapshot` / `__setProviderState` / `__attachProviderSource` | 当前会话 provider 的模块内状态，测「切会话时徽标跟着换数」用 |
+| `__keyListOf` / `__mainKeyOf` / `__balanceLines` | key 列表、主 key、余额行的取值函数 |
 
 测试里用 `node:vm` 把 `client.js` 丢进 `runInNewContext`，沙箱只需补 `URL` / `URLSearchParams` / `document` / `fetch` / 定时器 / `AbortSignal`。假 React 的 `createElement` 返回 `{ type, props, children }`，所以 `__HubFooter({ t, wide: true })` 能直接断言行结构和文案，不用起浏览器。
 

@@ -530,13 +530,11 @@ describe('侧边栏徽标：三行数字', () => {
     assert.equal(exports.__footerSummary({ usageRange: 'nope' }).range, 'all')
   })
 
-  test('展开态三行：key 名 + 该 key 余额/总余额、今日、本周，数字各自右对齐', async () => {
+  test('展开态三行：主 key 名 + 该 key 余额/总余额、今日、本周，数字各自右对齐', async () => {
     const { exports } = await loadClient()
     const zh = exports.__dicts.zh
     const t = (key) => zh[key] ?? key
 
-    // 当前会话用的是主 key 的路由，所以取主 key 的余额与用量。
-    exports.__setProviderState({ value: 'workbuddy2api-hub', routable: true })
     exports.__store.set(multiSnapshot())
 
     const tree = exports.__HubFooter({ t, wide: true })
@@ -553,7 +551,7 @@ describe('侧边栏徽标：三行数字', () => {
 
     // 第一行：key 名 + 「该 key 余额 / 总余额」
     const [nameNode, valueNode] = body.children[0].children
-    assert.equal(nameNode.children.join(''), 'key-a', '第一行写当前 key 的名字')
+    assert.equal(nameNode.children.join(''), 'key-a', '第一行写主 key 的名字')
     assert.equal(valueNode.children.join(''), '2841.06 / 3731.61')
 
     // 第二、三行：窗口名在左，三个数字在右，两行同构
@@ -568,36 +566,11 @@ describe('侧边栏徽标：三行数字', () => {
     assert.match(exports.__css, /\.wbhub_usageNums\{[^}]*grid-template-columns:[^}]*justify-items:end/)
   })
 
-  test('切到别的 key 的会话：余额与今日/本周都换成那条 key 的数', async () => {
-    const { exports } = await loadClient()
-    const zh = exports.__dicts.zh
-    const t = (key) => zh[key] ?? key
-
-    exports.__setProviderState({ value: 'workbuddy2api-hub-key-c', routable: true })
-    exports.__store.set(multiSnapshot())
-
-    const tree = exports.__HubFooter({ t, wide: true })
-    const body = tree.children[0].children[1]
-    const [nameNode, valueNode] = body.children[0].children
-    assert.equal(nameNode.children.join(''), 'key-c', '名字跟着会话走')
-    assert.equal(valueNode.children.join(''), '88.50 / 3731.61', '余额也按这条 key 算，不是主 key 的 2841.06')
-    assert.deepEqual(numsOf(body.children[1]), ['213.00', '0.00', '¥0.00'])
-    assert.deepEqual(numsOf(body.children[2]), ['639.00', '0.00', '¥0.00'])
-
-    // 会话用的不是网关模型（provider 为空）：回落主 key
-    exports.__setProviderState({ value: 'some-other-provider', routable: true })
-    const fallback = exports.__HubFooter({ t, wide: true })
-    const fallbackBody = fallback.children[0].children[1]
-    assert.equal(fallbackBody.children[0].children[0].children.join(''), 'key-a')
-    assert.equal(fallbackBody.children[0].children[1].children.join(''), '2841.06 / 3731.61')
-  })
-
   test('点击出副窗：贴着徽标上沿，不再用悬停 title；各 key 用量表照图排', async () => {
     const { exports } = await loadClient()
     const zh = exports.__dicts.zh
     const t = (key) => zh[key] ?? key
 
-    exports.__setProviderState({ value: 'workbuddy2api-hub', routable: true })
     exports.__store.set(multiSnapshot())
 
     const tree = exports.__HubFooter({ t, wide: true })
@@ -668,7 +641,6 @@ describe('侧边栏徽标：三行数字', () => {
     const snapshot = multiSnapshot()
     snapshot.mainKeyMissing = true
     snapshot.keys[0].missing = true
-    exports.__setProviderState({ value: 'workbuddy2api-hub', routable: false })
     exports.__store.set(snapshot)
 
     const tree = exports.__HubFooter({ t, wide: true })
@@ -692,7 +664,6 @@ describe('侧边栏徽标：三行数字', () => {
     delete snapshot.usageWeek
     delete snapshot.usageWeekByKey
     for (const key of snapshot.keys) delete key.usageWeek
-    exports.__setProviderState({ value: 'workbuddy2api-hub', routable: true })
     exports.__store.set(snapshot)
 
     const tree = exports.__HubFooter({ t, wide: true })
@@ -710,7 +681,6 @@ describe('侧边栏徽标：三行数字', () => {
     const zh = exports.__dicts.zh
     const t = (key) => zh[key] ?? key
 
-    exports.__setProviderState({ value: 'workbuddy2api-hub', routable: true })
     exports.__store.set(multiSnapshot())
 
     const tree = exports.__HubFooter({ t, wide: false })

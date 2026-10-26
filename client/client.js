@@ -102,7 +102,7 @@ window.__ModuleLoader__.load({
       mainKeyBalance: '主 key 余额',
       footerMainDeleted: '主 key 已删除',
       footerAllKeys: '全部 key：',
-      reselectHint: '当前会话的模型已失效，请在模型选择器里重新选择',
+      reselectHint: '主 key 已被删除，请在模型选择器里重新选择模型',
       keysTitle: 'Key 列表',
       foldOpen: '点击展开模型列表',
       foldClose: '点击收起模型列表',
@@ -144,12 +144,11 @@ window.__ModuleLoader__.load({
       cacheHit: '缓存命中',
       detailTitle: '用量详情',
       close: '关闭',
-      currentSession: '当前会话',
+      mainKeyTag: '主 key',
       keyDetail: '各 key 用量',
       totalRow: '总计',
       colCost: '等价',
       allAccounts: '全部账号',
-      noSession: '未使用网关模型',
       accountUnit: '号',
       emptyKeyModels: '这条 key 还没拉到模型',
       badgeOpen: '打开 WorkBuddy Hub 用量详情',
@@ -226,7 +225,7 @@ window.__ModuleLoader__.load({
       mainKeyBalance: 'Main key',
       footerMainDeleted: 'main key deleted',
       footerAllKeys: 'All keys:',
-      reselectHint: 'This session model is gone — pick a model again',
+      reselectHint: 'The main key is gone — pick a model again',
       keysTitle: 'API keys',
       foldOpen: 'click to expand the model list',
       foldClose: 'click to collapse the model list',
@@ -268,12 +267,11 @@ window.__ModuleLoader__.load({
       cacheHit: 'Cache hit',
       detailTitle: 'Usage detail',
       close: 'Close',
-      currentSession: 'Current session',
+      mainKeyTag: 'Main key',
       keyDetail: 'Usage by key',
       totalRow: 'Total',
       colCost: 'Cost',
       allAccounts: 'All accounts',
-      noSession: 'Not using a hub model',
       accountUnit: 'accts',
       emptyKeyModels: 'No models pulled for this key yet',
       badgeOpen: 'Open WorkBuddy Hub usage',
@@ -802,89 +800,6 @@ window.__ModuleLoader__.load({
         return unsubscribe
       }, [])
       return store.get()
-    }
-
-    /**
-     * 「当前会话用的是哪个 provider」的小发布订阅。
-     *
-     * 侧边栏插槽本身只给 `wide`，拿不到会话；真正的来源是客户端的两个服务：
-     *   - `uiSession.current`：`getSnapshot().value.key` 是当前会话 id；
-     *   - `modelDirectories.directoryFor(sessionId)`：`getSnapshot().current.provider`
-     *     是当前会话选的 providerId（就是我们写进去的 routeKey），
-     *     `routable === false` 表示这个 provider/模型已经不在目录里了。
-     * 两个都快照、都订阅：切会话只换内存快照，**不发任何请求**。
-     */
-    const providerState = { value: '', routable: true, listeners: new Set() }
-
-    /** 写入当前 provider（值没变就不通知，避免 15 秒轮询把徽标刷成抖动）。 */
-    function setProviderState(next) {
-      const value = typeof next?.value === 'string' ? next.value : ''
-      const routable = next?.routable !== false
-      if (providerState.value === value && providerState.routable === routable) return
-      providerState.value = value
-      providerState.routable = routable
-      for (const listener of providerState.listeners) listener()
-    }
-
-    /** 读当前 provider 快照（纯函数，测试里可直接调）。 */
-    function providerSnapshot() {
-      return { value: providerState.value, routable: providerState.routable }
-    }
-
-    /** 组件里读当前 provider。 */
-    function useCurrentProvider() {
-      const [state, setState] = useState(providerSnapshot())
-      useEffect(() => {
-        const listener = () => setState(providerSnapshot())
-        providerState.listeners.add(listener)
-        return () => providerState.listeners.delete(listener)
-      }, [])
-      return state.value
-    }
-
-    /**
-     * 把 `uiSession` / `modelDirectories` 接上（宿主没有这两个服务时静默跳过）。
-     * @param ctx - 客户端上下文。
-     * @returns 解绑函数（拿不到服务时返回 undefined）。
-     */
-    function attachProviderSource(ctx) {
-      if (typeof ctx?.inject !== 'function') return undefined
-      return ctx.inject(['uiSession', 'modelDirectories'], (scope) => {
-        const uiSession = scope.uiSession
-        const directories = scope.modelDirectories
-        if (uiSession === undefined || directories === undefined) return undefined
-        let directory = null
-        let offDirectory = null
-        const publish = () => {
-          const snapshot = directory === null ? null : directory.getSnapshot()
-          setProviderState({
-            value: snapshot?.current?.provider ?? '',
-            routable: snapshot?.routable !== false,
-          })
-        }
-        const read = () => {
-          let sessionId = ''
-          try {
-            sessionId = uiSession.current?.getSnapshot?.()?.value?.key ?? ''
-          } catch {
-            sessionId = ''
-          }
-          const next = sessionId === '' || typeof directories.directoryFor !== 'function' ? null : directories.directoryFor(sessionId)
-          if (next !== directory) {
-            if (typeof offDirectory === 'function') offDirectory()
-            directory = next ?? null
-            offDirectory =
-              directory === null || typeof directory.subscribe !== 'function' ? null : directory.subscribe(() => publish())
-          }
-          publish()
-        }
-        const offSession = typeof uiSession.current?.subscribe === 'function' ? uiSession.current.subscribe(() => read()) : null
-        read()
-        return () => {
-          if (typeof offSession === 'function') offSession()
-          if (typeof offDirectory === 'function') offDirectory()
-        }
-      })
     }
 
     /** 按钮：优先用宿主的 primitives，拿不到就原生。 */
@@ -1694,13 +1609,7 @@ window.__ModuleLoader__.load({
       return Array.isArray(snapshot?.keys) ? snapshot.keys : []
     }
 
-    /** 按 providerId（= 我们写进 DSH 的 routeKey）找回那条 key。 */
-    function keyByProvider(snapshot, provider) {
-      if (typeof provider !== 'string' || provider === '') return null
-      return keyListOf(snapshot).find((key) => key?.routeKey === provider) ?? null
-    }
-
-    /** 主 key：徽标在没有「当前会话 key」时的落点。 */
+    /** 主 key：徽标恒定的数据来源。 */
     function mainKeyOf(snapshot) {
       return keyListOf(snapshot).find((key) => key?.isMain === true) ?? null
     }
@@ -1770,10 +1679,11 @@ window.__ModuleLoader__.load({
       const [open, setOpen] = useState(false)
       const [opening, setOpening] = useState(false)
       const [anchor, setAnchor] = useState(null)
-      const currentProvider = useCurrentProvider()
       const wide = props.wide === true
 
-      const current = keyByProvider(snapshot, currentProvider) ?? mainKeyOf(snapshot)
+      // 徽标恒定显示主 key。这里原来跟着「当前会话选的 provider」走，但那条链路要读宿主的
+      // uiSession / modelDirectories，拿不到就静默回落主 key——表现上就是「不生效」，定位也难。
+      const current = mainKeyOf(snapshot)
       const summary = footerSummary(snapshot, 'today', current)
       const week = footerSummary(snapshot, 'week', current)
       const balances = balanceLines(snapshot, current)
@@ -1784,12 +1694,8 @@ window.__ModuleLoader__.load({
           : snapshot?.usageWeek !== null && snapshot?.usageWeek !== undefined
       const tone = error !== '' || snapshot === null ? palette.faint : snapshot.health?.ok === true ? palette.ok : palette.err
       const keys = keyListOf(snapshot)
-      // 当前会话选的 provider 是我们写进去的，但模型已经不在目录里了：
-      // 这是「主 key 被删」或「这条 key 的模型全被取消勾选」，只能让用户重选。
-      const stale = currentProvider !== '' && keyByProvider(snapshot, currentProvider) !== null && providerState.routable === false
       const mainBalanceText = balances.main === 'deleted' ? t('footerMainDeleted') : balances.main
-      const providerLabel = current !== null && current !== undefined ? current.name : t('noSession')
-      // 徽标第一行写哪条 key：跟着会话走；会话没走网关就写主 key 的名字。
+      // 徽标第一行写主 key 的名字；还没有 key 时写插件名。
       const badgeName =
         current !== null && current !== undefined && typeof current.name === 'string' && current.name !== ''
           ? current.name
@@ -1960,8 +1866,8 @@ window.__ModuleLoader__.load({
         h(
           'div',
           { className: 'wbhub_detailHead' },
-          h('span', { className: 'wbhub_sectionHead' }, t('currentSession')),
-          h('span', { className: 'wbhub_keyName' }, providerLabel),
+          h('span', { className: 'wbhub_sectionHead' }, t('mainKeyTag')),
+          h('span', { className: 'wbhub_keyName' }, badgeName),
           h('span', {
             className: 'wbhub_keyDot',
             style: { background: tone },
@@ -1982,7 +1888,7 @@ window.__ModuleLoader__.load({
               h('div', { className: 'wbhub_sectionHead' }, t('keyDetail')),
               usageTable,
             ),
-        stale === true ? h('div', { className: 'wbhub_detailNote' }, t('reselectHint')) : null,
+        snapshot?.mainKeyMissing === true ? h('div', { className: 'wbhub_detailNote' }, t('reselectHint')) : null,
         error !== '' ? h('div', { className: 'wbhub_detailNote', style: { color: palette.err } }, error) : null,
         typeof snapshot?.baseUrl === 'string' && snapshot.baseUrl !== ''
           ? h('div', { className: 'wbhub_detailNote' }, snapshot.baseUrl)
@@ -2034,9 +1940,6 @@ window.__ModuleLoader__.load({
 
       ctx.effect(() => ctx.locale.register(NS, { zh, en }), `${NS}: dictionaries`)
 
-      // 侧边栏插槽拿不到会话，只能从客户端服务里读当前 provider（拿不到就静默跳过）。
-      safeEffect(ctx, 'provider-source', () => attachProviderSource(ctx))
-
       safeEffect(ctx, 'settings.section', () =>
         ctx.slots.inject('settings.section', () =>
           ctx.slots.register(
@@ -2084,12 +1987,8 @@ window.__ModuleLoader__.load({
     exports.__sortRowsByName = sortRowsByName
     exports.__footerSummary = footerSummary
     exports.__keyListOf = keyListOf
-    exports.__keyByProvider = keyByProvider
     exports.__mainKeyOf = mainKeyOf
     exports.__balanceLines = balanceLines
-    exports.__providerSnapshot = providerSnapshot
-    exports.__setProviderState = setProviderState
-    exports.__attachProviderSource = attachProviderSource
     exports.__css = CSS
     exports.__injectStyles = injectStyles
     exports.__HubGlyph = HubGlyph
