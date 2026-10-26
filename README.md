@@ -87,7 +87,7 @@ node scripts/install-local.mjs  # 挂进 ~/.dsh/profiles/desktop
 
 ### 侧边栏徽标
 
-展开态三行：第一行是当前会话那条 key 的名字和「该 key 余额 / 整域余额」，第二行 `今日`、第三行 `本周`，右半边 `tokens / 积分 / 等价` 三列等宽右对齐。收起态是 `36×36` 圆形图标。
+展开态三行：第一行是主 key 的名字和「该 key 余额 / 整域余额」，第二行 `今日`、第三行 `本周`，右半边 `tokens / 积分 / 等价` 三列等宽右对齐。收起态是 `36×36` 圆形图标。
 
 **数字固定取主 key**：第一行的名字、余额，下面今日/本周的 tokens、积分、等价，都是主 key 那条的。副窗里的「各 key 用量」表才逐条列出所有 key。
 
@@ -231,7 +231,7 @@ ls -l ~/.dsh/profiles/desktop/node_modules/dsh-workbuddy2api-hub
 ```bash
 git clone https://github.com/HimA6652/dsh-workbuddy2api-hub.git
 cd dsh-workbuddy2api-hub
-npm test                                # 108 个测试，跑在假宿主 + 假 hub 上，不需要起 DSH
+npm test                                # 107 个测试，跑在假宿主 + 假 hub 上，不需要起 DSH
 node scripts/mock-hub.mjs --port 8789   # 起一个假 hub，用来手工点界面
 node scripts/smoke-live.mjs --json      # 对真实 hub 做只读联调
 npm run check                           # 发布前自查

@@ -133,7 +133,7 @@ chore(release): v1.2.2
 npm run release 1.1.0
 ```
 
-`scripts/release.mjs` 依次做：校验版本格式 → 确认 CHANGELOG 有该节 → 工作区必须干净 → 必须在 `main` → 标签不能重名 → 改 `package.json` 与 `tests/host.test.mjs` 的 `PLUGIN_VERSION` 断言 → 跑 `check-secrets` → 预演 Release 正文 → `npm test` → 查 npm 登录态与版本号有没有被占 → `npm publish` → 提交 `chore(release): vX` → `tag -a` → 推 main 与标签。
+`scripts/release.mjs` 依次做：校验版本格式 → 确认 CHANGELOG 有该节 → 工作区必须干净 → 必须在 `main` → 标签不能重名 → 改 `package.json`，再对齐 `tests/host.test.mjs` 里 `PLUGIN_VERSION` 的断言（断言写成 `assert.match(…, /^d+.d+.d+$/)` 时脚本会跳过、不用改） → 跑 `check-secrets` → 预演 Release 正文 → `npm test` → 查 npm 登录态与版本号有没有被占 → `npm publish` → 提交 `chore(release): vX` → `tag -a` → 推 main 与标签。
 
 **一条命令同时落到 npm 和 GitHub Release**。npm 那步失败会直接停下，不会留下「GitHub 有标签、npm 没版本」的半成品；正常走完时 GitHub 那边再等 Actions 跑半分钟。
 
@@ -164,7 +164,7 @@ curl -s https://registry.npmjs.org/dsh-workbuddy2api-hub | # 看 dist-tags 与 v
 npm pack dsh-workbuddy2api-hub@x.y.z --pack-destination tmp/ && tar -tzf tmp/*.tgz | sort
 ```
 
-`files` 白名单决定包里有什么：`lib/`、`client/`、`cordis.patch.yml`、README / CHANGELOG / LICENSE，共 8 个文件、约 60 kB。`scripts/`（安装脚本、假 hub、发版脚本）、`tests/`、`docs/`（包括这份笔记）、`.github/` 都只在仓库里——装插件的人用不到，发出去只是让每次 `npm i` 多下一次。
+`files` 白名单决定包里有什么：`lib/`、`client/`、`cordis.patch.yml`、README / CHANGELOG / LICENSE，共 8 个文件、约 90 kB（1.2.1 实测 90.7 kB / unpacked 290.9 kB）。`scripts/`（安装脚本、假 hub、发版脚本）、`tests/`、`docs/`（包括这份笔记）、`.github/` 都只在仓库里——装插件的人用不到，发出去只是让每次 `npm i` 多下一次。
 
 `package.json` 本身一定会进包，所以里面的 `scripts` 字段（`test` / `mock` / `release` 等）在装了包的人眼里是存在的、但文件不在——这些命令只在仓库里跑得动，属于开发用。装一遍验证最实在：
 
