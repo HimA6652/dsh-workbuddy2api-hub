@@ -1,6 +1,6 @@
 {
   "name": "dsh-workbuddy2api-hub",
-  "version": "1.3.2",
+  "version": "1.3.3",
   "description": "workbuddy2api-hub 集成：接入本地 hub 面板，同步模型（配额/上下文/思考档位）、实时额度与用量，支持服务地址与 pwd 配置",
   "type": "module",
   "main": "lib/index.js",
@@ -26,7 +26,7 @@
   ],
   "scripts": {
     "test": "node --test tests/*.test.mjs",
-    "check": "node scripts/check-secrets.mjs",
+    "check": "node scripts/check-secrets.mjs && node scripts/check-pack.mjs",
     "mock": "node scripts/mock-hub.mjs",
     "smoke": "node scripts/smoke-live.mjs",
     "link": "node scripts/install-local.mjs",
@@ -34,7 +34,7 @@
     "unlink": "node scripts/install-local.mjs --uninstall",
     "release": "node scripts/release.mjs",
     "notes": "node scripts/release-notes.mjs",
-    "prepublishOnly": "node scripts/check-secrets.mjs && npm test"
+    "prepublishOnly": "node scripts/check-pack.mjs && node scripts/check-secrets.mjs && npm test"
   },
   "dsh": {
     "bundle": {
@@ -55,8 +55,9 @@
     "./package.json": "./package.json"
   },
   "files": [
-    "lib",
-    "client",
+    "lib/index.js",
+    "lib/hub.js",
+    "client/client.js",
     "cordis.patch.yml",
     "README.md",
     "LICENSE",

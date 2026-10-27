@@ -134,7 +134,7 @@ chore(release): v1.2.2
 npm run release 1.1.0
 ```
 
-`scripts/release.mjs` 依次做：校验版本格式 → 确认 CHANGELOG 有该节 → 工作区必须干净 → 必须在 `main` → 标签不能重名 → 改 `package.json`，再对齐 `tests/host.test.mjs` 里 `PLUGIN_VERSION` 的断言（断言写成 `assert.match(…, /^d+.d+.d+$/)` 时脚本会跳过、不用改） → 跑 `check-secrets` → 预演 Release 正文 → `npm test` → 查 npm 登录态与版本号有没有被占 → `npm publish` → 提交 `chore(release): vX` → `tag -a` → 推 main 与标签。
+`scripts/release.mjs` 依次做：校验版本格式 → 确认 CHANGELOG 有该节 → 工作区必须干净 → 必须在 `main` → 标签不能重名 → 改 `package.json`，再对齐 `tests/host.test.mjs` 里 `PLUGIN_VERSION` 的断言（断言写成 `assert.match(…, /^d+.d+.d+$/)` 时脚本会跳过、不用改） → 跑 `check-secrets` 与 `check-pack`（制品与 `files` 白名单逐项核对） → 预演 Release 正文 → `npm test` → 查 npm 登录态与版本号有没有被占 → `npm publish` → 提交 `chore(release): vX` → `tag -a` → 推 main 与标签。
 
 **一条命令同时落到 npm 和 GitHub Release**。npm 那步失败会直接停下，不会留下「GitHub 有标签、npm 没版本」的半成品；正常走完时 GitHub 那边再等 Actions 跑半分钟。
 
@@ -150,7 +150,7 @@ node scripts/release-notes.mjs v1.1.0 > notes.md
 
 ## 发布到 npm
 
-`npm run release 1.1.0` 已经把 npm 一起发了，不用再单独 `npm publish`。手动发也不会漏自检：`prepublishOnly` 里挂着 `check-secrets` + 全部测试。
+`npm run release 1.1.0` 已经把 npm 一起发了，不用再单独 `npm publish`。手动发也不会漏自检：`prepublishOnly` 里挂着 `check-pack` + `check-secrets` + 全部测试。
 
 两个坑值得记下（都是 npm 11 的行为，不是本仓库的 bug）：
 
