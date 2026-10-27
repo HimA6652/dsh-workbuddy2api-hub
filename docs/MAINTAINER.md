@@ -205,8 +205,14 @@ CI 依次检查：条目数 ≤3 → 抓 `package.json` 验 `dsh.bundle` → 仓
 
 规则里「已覆盖」是平局排序依据、不是既得利益，且分叉只要维护得更好或确实多做了事就可以收录；但描述必须只写真实存在的差异。
 
-## 改代码时的三个坑
+## 改代码时的四个坑
 
 - **宿主侧 `lib/*.js` 改完必须重启 DSH**：`cordis-plugin-loader` 用裸 `await import(pkg)`，没有 cache-busting，ESM 缓存会一直给旧模块。
 - **`client/client.js` 改完，没开 HMR 就得重启 DSH**：`dsh-client-modules` 在 `reconcilePackage()` 里把 bundle 和 baseline 读进内存，`rev`（mtime/ctime/size 算出的 12 位 hash）也在那一刻定死；HTML 引用的是 `plugins/??<pkg>/client.js&rev=<启动时rev>`，响应头带 `public, max-age=31536000, immutable`。`rebuilt(id)` 是 HMR watch 的注册钩子——**没有 watcher 在跟，就不会有第二次读取**，刷新页面拿到的还是启动时那份。本机实测过：改完刷新页面看不到任何变化，重启才生效。装了 `dsh-client-hmr` 并在 watch 下跑，才会走「重新发布 bundle → 新 `rev`」那条路。
+- **宽限期表（`retired`）必须跨轮继承，别只从 `lastIds` 重建**：`reconcileModels()` 返回的
+  `retired` 是「模型下架后还留多久」的唯一依据，而 `lib/index.js` 每轮都会把 `key.lastModelIds`
+  重写成当轮清单。如果只看「本轮消失的 `lastIds`」，同一模型在第二轮就会被当成从没存在过——
+  `retireHours` 填 24 小时也只顶住一轮。1.3.2 的修法是先把 `previous.retired` 接过来，再合并
+  本轮新消失的，已在表里的保留原 `at` 不重置。写 `reconcileModels` 的测试时，`lastIds` 要按
+  真实形态传（上一轮的实际清单）；传成「仍含已消失模型」会把这个 bug 盖住，测试是绿的但线上是坏的。
 - **`package.json` 的 `scripts` 里别出现 `install` / `postinstall` / `prepublish`**：`install` 是 npm 的生命周期钩子，别人 `npm i` 你这个包时会被自动执行——我们最早那个 `"install": "node scripts/install-local.mjs"` 就因此把**装包人的 profile 依赖**改指向了包自身所在的临时目录，插件列表直接显示「异常 / 包不可用」。安装脚本现在叫 `npm run link`。

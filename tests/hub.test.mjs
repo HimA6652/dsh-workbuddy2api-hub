@@ -594,9 +594,11 @@ test('reconcileModels：下架进宽限期、回来能复活、到期才真删',
   assert.equal(second.retired.hy3.at, now)
 
   // 第三轮：宽限期内又没出现 → 继续保留。
+  // 注意 lastIds 用「上一轮的实际清单」['hy4-preview']，这才是生产里的形态：
+  // lib/index.js 每轮把 lastModelIds 重写成当轮清单，hy3 早就不在基准里了。
   const third = reconcileModels(
     [HY4],
-    { lastIds: ['hy4-preview', 'hy3'], models: second.models, retired: second.retired },
+    { lastIds: ['hy4-preview'], models: second.models, retired: second.retired },
     now + 3600_000,
     graceMs,
   )
@@ -606,7 +608,7 @@ test('reconcileModels：下架进宽限期、回来能复活、到期才真删',
   // 第四轮：宽限期到期 → 真正移除。
   const expired = reconcileModels(
     [HY4],
-    { lastIds: ['hy4-preview', 'hy3'], models: third.models, retired: third.retired },
+    { lastIds: ['hy4-preview'], models: third.models, retired: third.retired },
     now + graceMs + 1,
     graceMs,
   )
@@ -631,6 +633,53 @@ test('reconcileModels：下架进宽限期、回来能复活、到期才真删',
   // 非法输入不炸。
   assert.deepEqual(reconcileModels(null, null, now, graceMs).models, [])
   assert.deepEqual(reconcileModels([{ name: 'no id' }], {}, now, graceMs).models, [])
+})
+
+test('reconcileModels：连续多轮消失不会缩短宽限期（lastIds 每轮被重写）', () => {
+  const now = 1_000_000_000_000
+  const graceMs = 24 * 3600 * 1000
+  const tick = 30_000
+
+  // 轮 1：两个都在。轮末 lastModelIds 被写成当轮清单。
+  let r = reconcileModels([HY4, HY3], { lastIds: [], models: [], retired: {} }, now, graceMs)
+  let lastIds = [HY4.id, HY3.id]
+  let models = r.models
+  let retired = r.retired
+
+  // 轮 2：hy3 消失，进宽限期。
+  r = reconcileModels([HY4], { lastIds, models, retired }, now + tick, graceMs)
+  assert.deepEqual(r.removed, [HY3.id])
+  assert.equal(r.retired[HY3.id].at, now + tick)
+  lastIds = [HY4.id] // 轮末重写成当轮清单 —— hy3 从基准里消失
+  models = r.models
+  retired = r.retired
+
+  // 轮 3：hy3 依然不在，而且不在 lastIds 里了。仍要在宽限期里。
+  r = reconcileModels([HY4], { lastIds, models, retired }, now + tick * 2, graceMs)
+  assert.equal(r.models.length, 2, '第二轮之后仍要留在清单里，不能当它从没存在过')
+  assert.equal(r.retired[HY3.id].at, now + tick, '下架时间保持第一次，不要重置')
+  models = r.models
+  retired = r.retired
+
+  // 一路挺到宽限期最后 1 秒都还在，期间每轮都重写 lastIds。
+  for (let i = 3; i <= 2880; i += 1) {
+    r = reconcileModels([HY4], { lastIds, models, retired }, now + tick * i, graceMs)
+    models = r.models
+    retired = r.retired
+  }
+  const beforeExpiry = reconcileModels([HY4], { lastIds, models, retired }, now + tick + graceMs - 1, graceMs)
+  assert.equal(beforeExpiry.models.length, 2, '23 小时 59 分 59 秒时仍在')
+
+  // 到期才真删。
+  const afterExpiry = reconcileModels([HY4], { lastIds, models, retired }, now + tick + graceMs + 1, graceMs)
+  assert.equal(afterExpiry.models.length, 1)
+  assert.equal(afterExpiry.retired[HY3.id], undefined)
+
+  // 复活：宽限期内回来，和以前一样清标记、算新增。
+  const revived = reconcileModels([HY4, HY3], { lastIds, models, retired }, now + tick * 2, graceMs)
+  assert.equal(revived.models.every((model) => model.retired !== true), true)
+  assert.equal(revived.retired[HY3.id], undefined)
+  assert.deepEqual(revived.added, [HY3.id])
 })
 
 test('computeAlerts：四类告警 + 已读抑制', () => {

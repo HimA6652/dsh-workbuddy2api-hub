@@ -231,7 +231,7 @@ ls -l ~/.dsh/profiles/desktop/node_modules/dsh-workbuddy2api-hub
 ```bash
 git clone https://github.com/HimA6652/dsh-workbuddy2api-hub.git
 cd dsh-workbuddy2api-hub
-npm test                                # 107 个测试，跑在假宿主 + 假 hub 上，不需要起 DSH
+npm test                                # 109 个测试，跑在假宿主 + 假 hub 上，不需要起 DSH
 node scripts/mock-hub.mjs --port 8789   # 起一个假 hub，用来手工点界面
 node scripts/smoke-live.mjs --json      # 对真实 hub 做只读联调
 npm run check                           # 发布前自查
