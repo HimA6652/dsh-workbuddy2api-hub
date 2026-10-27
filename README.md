@@ -33,7 +33,7 @@
 1. **管理面**用 `pwd` 换面板 Token，读 `/health`、`/panel/status`、`/v1/models`、`/v1/balance-summary`、`/usage`、`/accounts`、`/settings`；
 2. **对话面**必须有一个真正的 API Key（DSH 调 `/v1/chat/completions` 时走 `Authorization: Bearer`）。取法三级：配置里写了 `apiKey` → 写进 DSH 凭据库；凭据库里已有同名引用 → 直接用；都没有 → 用面板 Token 读 `/settings` + `/settings/reveal?id=<keyId>`，取第一个启用的 Key。
 
-拿不到 Key 时插件**不会**硬写一条注定 401 的路由，而是把「缺少 hub API Key」挂进告警，等你填。
+拿不到 Key 时插件**不会**硬写一条注定 401 的路由，等你填（概览的「API Key 来源」会显示「未配置」）。
 
 ## 安装
 
@@ -97,11 +97,9 @@ node scripts/install-local.mjs  # 挂进 ~/.dsh/profiles/desktop
 
 余额拆不到 key 的只有 `/v1/balance-summary`（整域汇总），所以每条 key 的余额由后端拿 `/accounts` 里**这条 key 绑定的账号**求和得出（纯内存，不额外发请求）。账号没出现在 `/accounts` 里时显示 `—`，不报 0。
 
-### 告警与容错
+### 容错
 
-连不上、密码错、登录被限流、缺 API Key、额度低于阈值、账号需要重登——都能「知道了」消掉 24 小时。
-
-hub 没开、密码错、超时、返回 HTML、返回半截 JSON，插件都只把它变成一段中文提示：`/state` 永远返回 200，前端永远有东西可渲染。
+hub 没开、密码错、超时、返回 HTML、返回半截 JSON，插件都只把它变成一段中文提示——设置页顶部一行原因，轮询按失败次数退避。`/state` 永远返回 200，前端永远有东西可渲染。
 
 ## 配置
 
@@ -131,26 +129,24 @@ hub 没开、密码错、超时、返回 HTML、返回半截 JSON，插件都只
 | `autoApiKey` | `true` | 缺 Key 时是否允许从面板 `/settings/reveal` 自动取 |
 | `newModelPolicy` | `select` | hub 上新出的模型默认勾选（`select`）还是先不写（`ignore`） |
 | `retireHours` | `24` | 模型下架后的宽限期 |
-| `thresholds.lowCredits` | `100` | 余额低于它就告警；`0` 关掉 |
-| `thresholds.unreachablePolls` | `5` | 连续失败几次才报「连不上」 |
 | `stateDir` | 空 | 状态文件目录。默认跟 profile 同级（`workbuddy2api-hub.json`） |
 
 `baseUrl` / `pwd` / `tab` 三个字段按「显式字段指纹」判定：YAML 里改了值就覆盖状态，没改就保留你在设置页里最后改的值——所以「改配置即生效」和「UI 改动不被重启抹掉」不会打架。
 
 ## 错误处理
 
-所有失败都折成一句话写进 `lastError`，同时决定要不要出告警：
+所有失败都折成一句话写进 `lastError`，同时决定轮询怎么退避：
 
 | 情况 | 面板上看到的 | 还会做什么 |
 | --- | --- | --- |
 | 服务没开 / 端口不通 | 连不上 hub（fetch failed）：确认本地服务已启动（默认 http://127.0.0.1:8788） | 冷启动 60 秒内每 15 秒重试，之后指数退避 |
 | 8 秒没响应 | 连不上 hub（请求超时） | 同上 |
-| 密码错 | 面板密码（pwd）不对 | 出 `auth` 告警，不反复猛撞 |
+| 密码错 | 面板密码（pwd）不对 | 不反复猛撞（5 次/60 秒上限） |
 | 60 秒内错 5 次 | 面板登录被限流，N 秒后再试 | 轮询间隔抬到 hub 建议的等待时间以上 |
 | 404 | 服务版本可能与本插件不匹配（HTTP 404） | — |
 | 5xx | hub 内部错误（HTTP 500） | — |
 | 返回 HTML | 返回了非 JSON 内容 | — |
-| 缺 API Key | 还没有可用的 hub API Key，暂不写入模型 | 出 `api-key` 告警，不写注定 401 的路由 |
+| 缺 API Key | 还没有可用的 hub API Key，暂不写入模型 | 不写注定 401 的路由 |
 
 ## 依赖的面板接口
 
@@ -182,7 +178,7 @@ hub 没开、密码错、超时、返回 HTML、返回半截 JSON，插件都只
 | POST | `/keys/selection` `/keys/sync-selection` | 单独改某条 key 的勾选 / 把一条 key 的勾选同步到别的 key |
 | POST | `/keys/main` | 指定哪条 key 是主 key（只换身份，不改它已有的路由键） |
 | POST | `/keys/pull` | 立刻重拉某条 key 的模型（排障用，60 秒节流） |
-| POST | `/refresh` `/test` `/policy` `/dismiss` `/retire` `/clear` | 同步、探测、策略、消警、立即移除、清空同步 |
+| POST | `/refresh` `/test` `/policy` `/retire` `/clear` | 同步、探测、策略、立即移除、清空同步 |
 
 写接口有三道闸：只接受本机来源（`127.0.0.1` / `::1` / `::ffff:127.0.0.1`）、`sec-fetch-site` 必须是 `same-origin` 或 `none` 且 `Origin` 与 `Host` 一致、`content-type` 必须是 JSON。响应不带任何 CORS 头——同机网页用 `no-cors` 的简单请求也打不进写接口。
 
@@ -231,7 +227,7 @@ ls -l ~/.dsh/profiles/desktop/node_modules/dsh-workbuddy2api-hub
 ```bash
 git clone https://github.com/HimA6652/dsh-workbuddy2api-hub.git
 cd dsh-workbuddy2api-hub
-npm test                                # 109 个测试，跑在假宿主 + 假 hub 上，不需要起 DSH
+npm test                                # 108 个测试，跑在假宿主 + 假 hub 上，不需要起 DSH
 node scripts/mock-hub.mjs --port 8789   # 起一个假 hub，用来手工点界面
 node scripts/smoke-live.mjs --json      # 对真实 hub 做只读联调
 npm run check                           # 发布前自查
@@ -239,7 +235,7 @@ npm run check                           # 发布前自查
 
 目录：
 
-- `lib/hub.js`：纯函数层（地址归一化、模型档案、用量汇总、退避、告警），无网络、无 cordis，测试覆盖最厚。
+- `lib/hub.js`：纯函数层（地址归一化、模型档案、用量汇总、退避），无网络、无 cordis，测试覆盖最厚。
 - `lib/index.js`：宿主插件（`name` / `apply`）；`HubSession` 管登录与 Token，`HubRuntime` 管刷新与写配置。
 - `client/client.js`：已构建的 ModuleLoader bundle（设置页分区 + 侧边栏徽标），测试用 `node:vm` 加载。
 - `scripts/mock-hub.mjs`：复刻真实 hub 的鉴权语义（面板 Token 能读管理接口、Bearer 只认 API Key、60 秒 5 次失败返 429）。

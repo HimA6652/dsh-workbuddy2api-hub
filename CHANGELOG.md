@@ -3,6 +3,15 @@
 按 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/) 组织，版本号跟 `package.json` 走。
 每条只写**用户能感知的行为变化**和**会咬人的坑**；实现细节在 [docs/MAINTAINER.md](https://github.com/HimA6652/dsh-workbuddy2api-hub/blob/main/docs/MAINTAINER.md)。
 
+## [1.4.0] - 2026-10-27
+
+### 删掉
+
+- 设置页顶部那排告警条，以及它背后整套东西：`/dismiss` 接口、`snapshot.alerts` 字段、`thresholds` 配置（`lowCredits` / `unreachablePolls`）和每条右边的「知道了」按钮。
+- 告警原本提示六件事：连不上、密码错、被限流、缺 API Key、额度偏低、账号失效或即将过期。这些状态本身都还在，只是不再单独弹一条：连接问题看设置页顶部那行原因，额度看概览「额度」格，Key 来源看「API Key 来源」格，可用账号看「账号」格（`ready / total`）。
+
+升级：状态文件里的 `dismissed` 与 `thresholds` 两个字段下次保存时会被清掉，其余字段不动；`cordis.patch.yml` 里留着 `thresholds` 也不会报错，只是不再读取。
+
 ## [1.3.3] - 2026-10-27
 
 ### 修掉

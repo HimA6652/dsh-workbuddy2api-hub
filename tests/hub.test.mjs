@@ -10,7 +10,6 @@ import assert from 'node:assert/strict'
 import { test } from 'node:test'
 
 import {
-  ACCOUNTS_SOFT_LIMIT,
   DEFAULT_BASE_URL,
   DEFAULT_PWD,
   DEFAULT_TAB,
@@ -26,7 +25,6 @@ import {
   clampEfforts,
   classifyFailure,
   compareModelsByName,
-  computeAlerts,
   copySelection,
   hubVersionFromServer,
   isSyntheticUsageRow,
@@ -680,58 +678,6 @@ test('reconcileModels：连续多轮消失不会缩短宽限期（lastIds 每轮
   assert.equal(revived.models.every((model) => model.retired !== true), true)
   assert.equal(revived.retired[HY3.id], undefined)
   assert.deepEqual(revived.added, [HY3.id])
-})
-
-test('computeAlerts：四类告警 + 已读抑制', () => {
-  const auth = computeAlerts({ failureKind: 'auth', lastError: 'hub 鉴权失败' })
-  assert.equal(auth[0].key, 'auth')
-  assert.equal(auth[0].level, 'error')
-
-  const limited = computeAlerts({ failureKind: 'rate-limited', lastError: '限流' })
-  assert.equal(limited[0].key, 'rate-limited')
-
-  const unreachable = computeAlerts({ consecutiveFailures: 5, lastError: '连不上' })
-  assert.equal(unreachable[0].key, 'unreachable')
-
-  assert.deepEqual(computeAlerts({ consecutiveFailures: 4 }), [], '没到阈值就别吵')
-
-  const noKey = computeAlerts({ apiKeyPresent: false })
-  assert.equal(noKey[0].key, 'api-key')
-
-  const low = computeAlerts({ balance: { balance: 10 }, thresholds: { lowCredits: 100 } })
-  assert.equal(low[0].key, 'low-credits')
-
-  const accounts = computeAlerts({
-    accounts: { needRelogin: 1, expired: 1, accounts: [{ daysLeft: 2 }] },
-  })
-  assert.deepEqual(
-    accounts.map((alert) => alert.key),
-    ['relogin', 'expired', 'expiring'],
-  )
-
-  // `/accounts` 没有分页，条数到容量线就说一声——这是容量提示，不是错误。
-  const many = computeAlerts({ accounts: { total: ACCOUNTS_SOFT_LIMIT } })
-  assert.equal(many[0].key, 'accounts-large')
-  assert.equal(many[0].level, 'warning')
-  assert.ok(many[0].detail.includes(String(ACCOUNTS_SOFT_LIMIT)), '提示里要说清提示线是多少')
-  assert.deepEqual(
-    computeAlerts({ accounts: { total: ACCOUNTS_SOFT_LIMIT - 1 } }),
-    [],
-    '没到线就别提',
-  )
-
-  // 关掉的告警 24 小时内不再出现。
-  const now = 1_000_000_000_000
-  const dismissed = computeAlerts({ now, failureKind: 'auth', dismissed: { auth: now - 1000 } })
-  assert.deepEqual(dismissed, [])
-  const again = computeAlerts({ now, failureKind: 'auth', dismissed: { auth: now - 25 * 3600 * 1000 } })
-  assert.equal(again[0].key, 'auth', '超过 24 小时要重新提醒')
-
-  // 阈值可配。
-  assert.equal(computeAlerts({ consecutiveFailures: 2, thresholds: { unreachablePolls: 2 } })[0].key, 'unreachable')
-  // 空输入不炸。
-  assert.deepEqual(computeAlerts({}), [])
-  assert.deepEqual(computeAlerts(null), [])
 })
 
 test('pickBaseUrl', () => {

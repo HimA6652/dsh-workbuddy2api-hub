@@ -632,8 +632,6 @@ describe('多 key：一 key 一条路由一条凭据', () => {
       const snapshot = runtime.snapshot()
       assert.equal(snapshot.mainKeyMissing, true, '徽标要能显示「主 key 已删除」')
       assert.equal(snapshot.counts.total, 0, '主 key 没了，顶层不再冒充还有模型')
-      // 别的 key 还在同步，所以 lastSyncError 是空的——这事得靠告警说清楚。
-      assert.ok(snapshot.alerts.some((alert) => alert.key === 'main-key-missing'), '要出「主 key 已不在网关里」告警')
 
       const providers = ctx.__entries.find((row) => row.ns === 'llm-pi-ai').value.providers
       assert.equal(providers[DEFAULT_ROUTE_KEY], undefined, '主路由必须删掉，不能拿别的 key 顶替')
@@ -658,18 +656,12 @@ describe('失败路径：连不上 / 密码错 / 被限流 / 没 Key', () => {
       assert.match(runtime.lastSyncError, /8788|启动/, '要提示用户去确认服务起没起')
       const snapshot = runtime.snapshot()
       assert.equal(snapshot.counts.total, 0)
-      // 单次连不上先不弹告警（服务偶尔重启不该吵人），连续失败到阈值才提醒。
-      assert.equal(snapshot.alerts.some((alert) => alert.key === 'unreachable'), false)
       // 状态文件照旧可读，插件不会因为 hub 掉线而崩。
       const again = await runtime.refresh({ sync: true })
       assert.equal(again.ok, false)
       assert.equal(runtime.consecutiveFailures, 2)
       for (let index = 0; index < 3; index += 1) await runtime.refresh({ sync: true })
       assert.equal(runtime.consecutiveFailures, 5)
-      assert.ok(
-        runtime.snapshot().alerts.some((alert) => alert.key === 'unreachable'),
-        '连续失败到阈值后要给出告警',
-      )
     } finally {
       ctx.__dispose()
     }
@@ -684,8 +676,6 @@ describe('失败路径：连不上 / 密码错 / 被限流 / 没 Key', () => {
       assert.equal(runtime.failureKind, 'auth')
       assert.match(runtime.lastSyncError, /pwd/)
       assert.equal(runtime.session.loggedIn, false)
-      const alerts = runtime.alerts()
-      assert.equal(alerts[0].key, 'auth')
     } finally {
       ctx.__dispose()
       await stopMockHub(server)
@@ -734,7 +724,6 @@ describe('失败路径：连不上 / 密码错 / 被限流 / 没 Key', () => {
         undefined,
         '写了也是「一选就 401」，不如不写，让用户先看到告警',
       )
-      assert.ok(snapshot.alerts.some((alert) => alert.key === 'api-key'))
     } finally {
       ctx.__dispose()
       await stopMockHub(server)

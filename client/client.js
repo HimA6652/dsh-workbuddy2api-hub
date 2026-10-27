@@ -82,7 +82,6 @@ window.__ModuleLoader__.load({
       policySelect: '自动勾选',
       policyIgnore: '先不勾选',
       retireHours: '下架宽限期（小时）',
-      lowCredits: '低额度阈值',
       autoApiKey: '自动从面板取 API Key',
       health: '服务',
       accounts: '账号',
@@ -131,7 +130,6 @@ window.__ModuleLoader__.load({
       loggedOut: '未登录',
       autoSynced: '自动同步到 DSH',
       disabledSync: '自动同步已关闭',
-      dismiss: '知道了',
       unsupported: '当前 hub 版本不支持该接口',
       unknownError: '未知错误',
       loading: '加载中…',
@@ -161,7 +159,6 @@ window.__ModuleLoader__.load({
       apiKeyFromCredentials: '凭据库',
       apiKeyFromPanel: '面板自动获取',
       apiKeyMissing: '未配置',
-      reasons: '告警',
     }
 
     const en = {
@@ -206,7 +203,6 @@ window.__ModuleLoader__.load({
       policySelect: 'Select automatically',
       policyIgnore: 'Leave unselected',
       retireHours: 'Retire grace (hours)',
-      lowCredits: 'Low credit threshold',
       autoApiKey: 'Fetch API key from panel',
       health: 'Service',
       accounts: 'Accounts',
@@ -255,7 +251,6 @@ window.__ModuleLoader__.load({
       loggedOut: 'signed out',
       autoSynced: 'Syncing into DSH',
       disabledSync: 'Sync disabled',
-      dismiss: 'Got it',
       unsupported: 'This hub version does not expose that endpoint',
       unknownError: 'Unknown error',
       loading: 'Loading…',
@@ -285,7 +280,6 @@ window.__ModuleLoader__.load({
       apiKeyFromCredentials: 'Credential store',
       apiKeyFromPanel: 'Auto from panel',
       apiKeyMissing: 'Not set',
-      reasons: 'Alerts',
     }
 
     /* ------------------------------- 配色 ------------------------------- */
@@ -957,7 +951,7 @@ window.__ModuleLoader__.load({
       const [folded, setFolded] = useState({})
 
       // 快照回来后把表单同步成服务端状态；用户正在输入时（draft 已被改过）不覆盖。
-      const serverKey = snapshot === null ? '' : `${snapshot.baseUrl}|${snapshot.tab}|${snapshot.intervalSeconds}|${snapshot.policy?.newModelPolicy}|${snapshot.policy?.retireHours}|${snapshot.policy?.thresholds?.lowCredits}`
+      const serverKey = snapshot === null ? '' : `${snapshot.baseUrl}|${snapshot.tab}|${snapshot.intervalSeconds}|${snapshot.policy?.newModelPolicy}|${snapshot.policy?.retireHours}`
 
       const form = draft ?? {
         baseUrl: snapshot?.baseUrl ?? '',
@@ -967,7 +961,6 @@ window.__ModuleLoader__.load({
         intervalSeconds: snapshot?.intervalSeconds ?? 120,
         newModelPolicy: snapshot?.policy?.newModelPolicy ?? 'select',
         retireHours: snapshot?.policy?.retireHours ?? 24,
-        lowCredits: snapshot?.policy?.thresholds?.lowCredits ?? 50,
         autoApiKey: snapshot?.policy?.autoApiKey !== false,
       }
 
@@ -995,7 +988,6 @@ window.__ModuleLoader__.load({
           policy: {
             newModelPolicy: form.newModelPolicy,
             retireHours: Number(form.retireHours) || 0,
-            thresholds: { lowCredits: Number(form.lowCredits) || 0 },
           },
         }
         if (typeof form.pwd === 'string' && form.pwd !== '') body.pwd = form.pwd
@@ -1091,27 +1083,6 @@ window.__ModuleLoader__.load({
           ? h('div', { style: styles.banner('info') }, h('span', null, t('pendingSync')))
           : null
       const noticeBanner = notice === '' ? null : h('div', { style: styles.banner('info') }, h('span', null, notice))
-
-      const alerts =
-        Array.isArray(snapshot?.alerts) && snapshot.alerts.length > 0
-          ? h(
-              'div',
-              { style: { display: 'flex', flexDirection: 'column', gap: '6px' } },
-              ...snapshot.alerts.map((alert) =>
-                h(
-                  'div',
-                  { key: alert.key, style: styles.banner(alert.level === 'error' ? 'error' : 'warning') },
-                  h('strong', null, alert.title),
-                  h('span', { style: { flex: '1 1 200px' } }, alert.detail),
-                  h('button', {
-                    type: 'button',
-                    style: { ...styles.button, padding: '2px 8px' },
-                    onClick: () => post('dismiss', { key: alert.key }, `dismiss:${alert.key}`),
-                  }, t('dismiss')),
-                ),
-              ),
-            )
-          : null
 
       /* ------------------------------ 连接配置 ------------------------------ */
       const connectionCard = h(
@@ -1533,18 +1504,6 @@ window.__ModuleLoader__.load({
           ),
           h(
             'label',
-            { style: styles.field },
-            h('span', { style: styles.label }, t('lowCredits')),
-            h('input', {
-              style: styles.input,
-              type: 'number',
-              min: 0,
-              value: form.lowCredits ?? 50,
-              onChange: (event) => patch({ lowCredits: event.target.value }),
-            }),
-          ),
-          h(
-            'label',
             { style: { ...styles.row, gap: '6px', alignSelf: 'flex-end' } },
             h('input', {
               type: 'checkbox',
@@ -1573,7 +1532,6 @@ window.__ModuleLoader__.load({
         { className: 'wbhub_panel', style: styles.wrap, 'data-dsh-plugin': NS },
         head,
         errorBanner,
-        alerts,
         noticeBanner,
         pendingBanner,
         syncError,
