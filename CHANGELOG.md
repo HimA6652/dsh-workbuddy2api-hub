@@ -3,6 +3,18 @@
 按 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/) 组织，版本号跟 `package.json` 走。
 每条只写**用户能感知的行为变化**和**会咬人的坑**；实现细节在 [docs/MAINTAINER.md](https://github.com/HimA6652/dsh-workbuddy2api-hub/blob/main/docs/MAINTAINER.md)。
 
+## [1.4.1] - 2026-10-28
+
+维护版本：对着网关 1.10.0 把用到的每个接口逐字段核了一遍，没有破坏性变化，行为和 1.4.0 完全一致。
+
+### 改掉
+
+- README 的适用版本行从「实测 v1.8.x」改成「实测 v1.8、v1.10」——本机网关已经跑到 1.10.0 了。
+
+### 核过的地方
+
+七个接口的字段全部还在，没有改名也没有删：`/accounts`、`/settings`、`/usage`、`/usage/analytics`、`/v1/models`、`/v1/balance-summary`、`/health`。`/usage/analytics` 的 `keys[]` 里，三条真 key 的 `key` 仍然是网关的 key id，两个合成桶仍然以 `__` 开头；账号的 `credits` 有 118 条是 `null`（照旧跳过），`ready` 本来就由插件自己算，网关不提供这个字段。
+
 ## [1.4.0] - 2026-10-27
 
 ### 删掉

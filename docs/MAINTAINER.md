@@ -96,6 +96,16 @@ cordis_inspect_query platform=client provider=Slots method=listSubTree
 - 前端每 15 秒读一次插件 `/state`（`ETag` + `If-None-Match`，304 就复用上一份），标签页在后台（`document.hidden`）时跳过。
 - 徽标是「缓存视图」：最旧数据 = `intervalSeconds` + 15 秒。要秒级实时就点开面板，它自己 5 秒刷一次。
 
+## 上游网关版本核对
+
+网关发新版时照这个顺序过一遍，只做核对不改代码，除非确实缺字段。
+
+1. **先确认公开仓库到哪一版**：`git ls-remote --tags --refs https://github.com/ardeyouxipianyi/workbuddy2api-hub.git`。注意 2026-10 的情况是**公开 tag 只到 v1.8.0，而本机网关跑的是 1.10.0**——作者不一定先发 tag 再发版，所以源码 diff 未必覆盖得到你手上那个版本。
+2. **拿不准就只信实测**：读本机状态文件里的 `pwd` → `POST /panel/login {password}` 换 `x-panel-token` → 逐个端点 dump **键名**（不打印值，避免把账号名和金额带出来）。
+3. **要核的七个端点**：`/accounts`、`/settings`、`/usage`、`/usage/analytics`、`/v1/models`、`/v1/balance-summary`、`/health`。重点是插件真正读的那几个字段：`api_keys[].{id,name,masked,realm,models,accounts,enabled,source,created_at}`、`deleted_api_keys`、`panel_password_is_default`、`accounts[].{uid,nickname,realm,platform,enabled,tokenExpired,needRelogin,inCooldown,credits.remain,expiresAt,expiresIn}`、`usage.analytics.keys[]` 的 `key`／`window.{requests,errors,total_tokens,credit,cost_cny}`、模型上的 `context_length`／`max_output_tokens`／`reasoning_efforts`／`credits`。
+4. **两条容易忽略的**：① `/health` **从来没有 `version` 字段**，网关版本只能从响应头 `Server: wb-proxy/<版本>` 抠；② `/usage/analytics` 里除真 key 外还有两个以 `__` 开头的合成桶（`(无 key)` / `(未知 key)`），`isSyntheticUsageRow()` 靠前缀滤掉它们，别改成精确匹配。
+5. **容错不需要动**：账号 `credits` 可能是 `null`（`mainKeyBalance` 已用 `Number.isFinite` 跳过），`ready` 是插件自己算的。
+
 ## commit 与版本文案
 
 一句话：写**做了什么**，不写为什么。
