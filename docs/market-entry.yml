@@ -15,4 +15,6 @@ description:
 # dsh-workbuddy-harness、DSH-Official-WorkBuddy-Credit-Proxy、DSH-Workbuddy-WebSearch）
 # 都是直连 WorkBuddy 桌面端或其官方渠道；这条接的是用户自己起的本地网关
 # workbuddy2api-hub（默认 127.0.0.1:8788），代码里没有任何通往 WorkBuddy App 的路径。
-# PR 正文模板与完整说明见 tmp/market-pr/PR.md（已提交时请在 PR 里勾完 checklist）。
+# 状态：已提交并合并 —— PR #9513，2026-10-26T17:17:50Z 合并（开出 13 小时 43 分，零评论）。
+# 条目落在 data/plugins/HimA6652__dsh-workbuddy2api-hub.yml，生成的列表 README 第 2359 行可查。
+# 本文件是条目原文存档；日后描述若要改，按同样 4 个字段改上游那一份，再发新 PR。

@@ -252,7 +252,6 @@ async function main() {
       lastError: state?.lastError ?? '',
       lastSyncError: state?.lastSyncError ?? '',
       failureKind,
-      alerts: state?.alerts ?? [],
     }
 
     if (options.json) {
@@ -308,7 +307,6 @@ async function main() {
         console.log(line('账号', `${report.accounts.total} 个（可用 ${report.accounts.ready}，需重登 ${report.accounts.needRelogin}）`))
       }
       if (report.lastError !== '') console.log(line('最后错误', report.lastError))
-      for (const alert of report.alerts) console.log(line('告警', `${alert.title}：${alert.detail}`))
     }
 
     if (state === null || state === undefined) return 4

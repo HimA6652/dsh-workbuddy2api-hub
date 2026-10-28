@@ -708,7 +708,7 @@ describe('失败路径：连不上 / 密码错 / 被限流 / 没 Key', () => {
     }
   })
 
-  test('面板里没有 API Key：模型照样列出来，但不写路由并给出告警', async () => {
+  test('面板里没有 API Key：模型照样列出来，但不写路由，只在同步错误里说明原因', async () => {
     const { server, base } = await startMockHub({ noApiKey: true })
     const ctx = await makeCtx()
     const runtime = new HubRuntime(ctx, { baseUrl: base })
@@ -722,7 +722,7 @@ describe('失败路径：连不上 / 密码错 / 被限流 / 没 Key', () => {
       assert.equal(
         entry.value.providers[DEFAULT_ROUTE_KEY],
         undefined,
-        '写了也是「一选就 401」，不如不写，让用户先看到告警',
+        '写了也是「一选就 401」，不如不写，让用户先看到同步错误',
       )
     } finally {
       ctx.__dispose()
